@@ -60,7 +60,7 @@ jobs:
     permissions:
       contents: write        # upload assets onto the release just created
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The tag, not main: main may already have moved on, and the archive
           # has to match the version stamped in the release.
