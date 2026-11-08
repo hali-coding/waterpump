@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/hali-coding/waterpump/compare/v0.11.0...v0.11.1) (2026-11-08)
+
+
+### Dependencies
+
+* bump the runtime group in /web with 2 updates ([8851772](https://github.com/hali-coding/waterpump/commit/885177213920a5bcdbc001aad6bb4502571f1fe1))
+
 ## [0.11.0](https://github.com/hali-coding/waterpump/compare/v0.10.0...v0.11.0) (2026-10-17)
 
 
