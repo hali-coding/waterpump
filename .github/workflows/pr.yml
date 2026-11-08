@@ -57,7 +57,7 @@ jobs:
         # checks it. Move the two newest along when a Python is released.
         python-version: ["3.10", "3.14", "3.15"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -84,7 +84,7 @@ jobs:
     needs: commit-style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -106,7 +106,7 @@ jobs:
     needs: commit-style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: sh -n every module
         # Modules run under /bin/sh in the container -- dash on Debian/Ubuntu,
@@ -128,7 +128,7 @@ jobs:
     needs: commit-style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:

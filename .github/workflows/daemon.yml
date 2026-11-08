@@ -33,7 +33,7 @@ jobs:
         # supported range. Keep it in step with pr.yml's matrix.
         python: ["3.10", "3.15"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # uv rather than setup-python, whose prebuilt interpreters are built
       # for Ubuntu and not this Debian VM. It keeps the interpreters it
