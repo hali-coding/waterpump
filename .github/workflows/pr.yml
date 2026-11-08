@@ -170,6 +170,10 @@ jobs:
     # incus-admin (root-equivalent), so a fork's PR never gets here -- it
     # would be running its own code on our host. Same-repo PRs and manual runs
     # only; a fork's change is checked here after it is pushed to a branch.
+    # Dependabot's branches are same-repo but no more reviewed than a fork's:
+    # bumping an action would run its new code on that host before anyone had
+    # read it. An npm bump has nothing to prove here anyway, as the smoke
+    # never builds the UI. A manual run still covers a Dependabot branch.
     needs: [python, compat, modules, web]
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event.pull_request.user.login != 'dependabot[bot]'
     uses: ./.github/workflows/daemon.yml
