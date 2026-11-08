@@ -39,7 +39,7 @@ jobs:
       # for Ubuntu and not this Debian VM. It keeps the interpreters it
       # downloads in the runner user's cache, so the long-lived VM fetches
       # each once.
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.3
 
       - name: Python ${{ matrix.python }}
         run: |
