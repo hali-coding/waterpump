@@ -1,5 +1,5 @@
 #cloud-config
-# image: https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
+# image: https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2
 # Plain Debian 13 + Incus. @HOSTNAME@ and @SSH_KEYS@ are filled in by
 # scripts/create-vm.sh; Proxmox's own meta-data sets no hostname when
 # cicustom supplies user-data, so it has to be here.

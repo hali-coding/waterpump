@@ -2,7 +2,8 @@
 # whole cluster -- the floor every later test stands on.
 while read -r vmid name os octet flavor _; do
     ip=$CI_NET.$octet
-    status=$(wp "$SET" "$ip" status --json)
+    # </dev/null: ssh reads stdin, which here is the rest of $NODES.
+    status=$(wp "$SET" "$ip" status --json </dev/null)
     printf '%s' "$status" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
@@ -14,7 +15,7 @@ print("%s: %s ready" % (sys.argv[2], got))' "$flavor" "$name" || fail "$name sta
 done < "$NODES"
 
 want=$(wc -l < "$NODES")
-wp "$SET" "$FIRST_IP" cluster status --json | python3 -c '
+wp "$SET" "$FIRST_IP" cluster status --json </dev/null | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 names = sorted(n["name"] for n in d["nodes"])

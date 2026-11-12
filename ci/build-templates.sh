@@ -51,13 +51,16 @@ build() {
     url=$(resolve_url "$url" "$pattern")
     file=$CI_CACHE/$os.qcow2
     group "$os: fetch $url"
+    # Always into $file.new, moved into place only once complete: a partial
+    # file under the final name would look current to -z and be uploaded.
     # -z: only download when the remote is newer than what is cached.
+    rm -f "$file.new"
     if [ -f "$file" ]; then
-        curl -fsSL -z "$file" -o "$file.new" "$url"
-        if [ -s "$file.new" ]; then mv "$file.new" "$file"; else rm -f "$file.new"; fi
+        curl -fsSL -z "$file" -o "$file.new" "$url" || { rm -f "$file.new"; die "$os: download failed"; }
     else
-        curl -fsSL -o "$file" "$url"
+        curl -fsSL -o "$file.new" "$url" || { rm -f "$file.new"; die "$os: download failed"; }
     fi
+    if [ -s "$file.new" ]; then mv "$file.new" "$file"; else rm -f "$file.new"; fi
     upload=wpci-$os.qcow2
     volid=$PVE_IMPORT_STORAGE:import/$upload
     # An upload under the same name replaces the last one, so one file per OS
@@ -146,7 +149,9 @@ build() {
     log "$os: template $name ($vmid)"
 }
 
-wanted=${*:-$(awk '!/^#/ && NF { print $1 }' "$ci/images.conf")}
+# Space-separated, as the match below expects (awk's lines would match none,
+# and a bare run -- the weekly ci-images.yml -- would build nothing).
+wanted=${*:-$(awk '!/^#/ && NF { print $1 }' "$ci/images.conf" | tr '\n' ' ')}
 idx=0
 awk '!/^#/ && NF' "$ci/images.conf" | while read -r os octet url pattern; do
     idx=$((idx + 1))

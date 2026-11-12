@@ -29,20 +29,32 @@ node_ip() {
     echo "$CI_NET.$octet"
 }
 
+# Build the UI when web/dist is missing or older than anything it is built
+# from: a dev cluster runs this checkout, UI edits and branch switches
+# included, and a stale bundle would quietly show the old UI.
+web_fresh() {
+    local d=$repo/web/dist/index.html
+    if [ ! -f "$d" ] || [ -n "$(cd "$repo/web" && find src public index.html package.json \
+            package-lock.json vite.config.* -newer "$d" -print 2>/dev/null | head -n 1)" ]; then
+        log "building the UI (web/dist is missing or older than web/)"
+        (cd "$repo" && ./build.sh)
+    fi
+}
+
 cmd=${1:-status}
 [ $# -eq 0 ] || shift
 case $cmd in
     up)
         count=
         [ "${1:-}" = --small ] && count=2
-        [ -f "$repo/web/dist/index.html" ] || (cd "$repo" && ./build.sh)
+        web_fresh
         "$ci/up.sh" $SET $count
         "$ci/install.sh" $SET
         "$ci/cluster.sh" $SET
         log "up. ssh: ci/dev-cluster.sh ssh 1   UI: ci/dev-cluster.sh ui 1"
         ;;
     update)
-        [ -f "$repo/web/dist/index.html" ] || (cd "$repo" && ./build.sh)
+        web_fresh
         "$ci/install.sh" $SET
         ;;
     status)
