@@ -1,0 +1,40 @@
+# Rebuild the golden VM templates cluster.yml clones from (ci/build-templates.sh):
+# weekly, so CI's VMs start with current packages without spending a run's
+# time upgrading them, and by hand after changing ci/images/ or images.conf.
+# A failed build keeps the previous template, so CI carries on regardless.
+name: CI images
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      os:
+        description: "OSes to rebuild, space separated (empty: all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  templates:
+    name: Build templates
+    runs-on: [self-hosted, waterpump-cluster]
+    timeout-minutes: 120
+    # Shares cluster.yml's group: a template build and a cluster run do not
+    # both fit in the host's RAM.
+    concurrency:
+      group: waterpump-pve
+      cancel-in-progress: false
+    env:
+      PVE_API_URL: ${{ secrets.PVE_API_URL }}
+      PVE_TOKEN_ID: ${{ secrets.PVE_TOKEN_ID }}
+      PVE_TOKEN_SECRET: ${{ secrets.PVE_TOKEN_SECRET }}
+      PVE_TLS_PIN: ${{ secrets.PVE_TLS_PIN }}
+      PVE_NODE: ${{ vars.PVE_NODE }}
+      OS: ${{ inputs.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: ci/build-templates.sh $OS

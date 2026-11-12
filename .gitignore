@@ -12,3 +12,9 @@ web/dist/
 
 # Local output of .github/scripts/bundle.sh.
 /dist/
+
+# ci/: workstation settings, and what a set keeps between scripts.
+ci/.env
+ci/.env.*
+!ci/.env.example
+ci/.state/

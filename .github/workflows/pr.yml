@@ -177,3 +177,15 @@ jobs:
     needs: [python, compat, modules, web]
     if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event.pull_request.user.login != 'dependabot[bot]'
     uses: ./.github/workflows/daemon.yml
+
+  cluster:
+    name: Cluster
+    # Four VMs on the CI Proxmox host (cluster.yml): every supported OS and
+    # both daemons, federated. Gated like `daemon` above and for the same
+    # reasons -- a fork's or Dependabot's code never runs there with the
+    # host's API token -- and after the hosted jobs, so a change that does
+    # not even build never takes the host's time.
+    needs: [python, compat, modules, web]
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event.pull_request.user.login != 'dependabot[bot]'
+    uses: ./.github/workflows/cluster.yml
+    secrets: inherit
