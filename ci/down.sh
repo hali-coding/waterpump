@@ -10,7 +10,8 @@ ci=$(cd "$(dirname "$0")" && pwd)
 . "$ci/lib/common.sh"
 . "$ci/lib/pve.sh"
 
-set=${1:?usage: down.sh <set>}
+[ $# -ge 1 ] || usage
+set=$1
 [ -n "$(conf_nodes "$set")" ] || die "nodes.conf has no set $set"
 st=$(state_dir "$set")
 
@@ -23,5 +24,8 @@ done < "$st/nodes"
 conf_nodes "$set" | while read -r vmid name _; do pve_destroy "$vmid" "$name"; done
 # Last, once the VMs are gone: the hold is what keeps the other set out.
 pve_release "$set"
-rm -f "$st/nodes" "$st/known_hosts" "$st"/install-*.log "$st/waterpump.tar.gz"
+# The whole state dir, key and login included: the next up.sh makes a new
+# key, and nothing outlives the VMs it was for.
+rm -rf "$st"
+rmdir "${st%/*}" 2>/dev/null || true
 endgroup

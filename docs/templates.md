@@ -56,7 +56,7 @@ fills the form from a template, for a one-off variation.
 
 ```bash
 ./waterpump template-save "Web server" -i images:debian/12 -c 2 -m 2GiB \
-    -b base -b ssh-access --param USERNAME=hampus --all-ssh-keys \
+    -b base -b ssh-access --param USERNAME=alice --all-ssh-keys \
     --prefix web --description "nginx boxes"
 ./waterpump template-save "Pg" -i ubuntu:24.04 -P "Web server" -b postgresql
 ./waterpump templates
@@ -429,8 +429,8 @@ or check them into a project:
   "secureboot": true,
   "bootstrap": {
     "modules": ["base", "ssh-access"],
-    "params": { "USERNAME": "hampus", "SHELL_PATH": "/bin/bash" },
-    "ssh_keys": ["ssh-ed25519 AAAA… hampus@laptop"]
+    "params": { "USERNAME": "alice", "SHELL_PATH": "/bin/bash" },
+    "ssh_keys": ["ssh-ed25519 AAAA… alice@laptop"]
   },
   "app_check": {
     "script": "curl -fs localhost >/dev/null || exit 2\necho OK\n",

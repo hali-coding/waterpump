@@ -220,7 +220,7 @@ registration without destroying the zpool. A successful response includes
 normal destructive pool-delete behavior.
 
 `/api/nodes/{node}/{path}` forwards any call to one member —
-`/api/nodes/prdev2/containers/web-1/exec` runs a command on `web-1` over there.
+`/api/nodes/nodeB/containers/web-1/exec` runs a command on `web-1` over there.
 The access checked is the target endpoint's, resolved against the same route
 table, so forwarding grants nothing extra; an unrecognised path is treated as
 admin-only, and a proxied call cannot be proxied again. The member answers it

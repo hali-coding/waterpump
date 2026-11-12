@@ -9,8 +9,8 @@ set -u
 ci=$(cd "$(dirname "$0")" && pwd)
 . "$ci/lib/common.sh"
 
-set=${1:?usage: collect.sh <set> <dir>}
-out=${2:?usage: collect.sh <set> <dir>}
+[ $# -ge 2 ] || usage
+set=$1 out=$2
 st=$(state_dir "$set")
 mkdir -p "$out"
 [ -f "$st/nodes" ] || { echo "set $set was never up" > "$out/README"; exit 0; }

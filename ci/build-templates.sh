@@ -34,6 +34,12 @@ resolve_url() {
     esac
 }
 
+# A build's key is only for the build: gone with the VM it let in.
+drop_state() {
+    rm -rf "$st"
+    rmdir "${st%/*}" 2>/dev/null || true
+}
+
 keep_for_debugging() {
     cat ~/.ssh/id_*.pub 2>/dev/null | on "$set_name" "$ip" 'cat >> ~/.ssh/authorized_keys' </dev/null 2>/dev/null ||
         log "could not add ~/.ssh/id_*.pub; use ci/.state/$set_name/id_ed25519"
@@ -43,7 +49,7 @@ keep_for_debugging() {
 build() {
     os=$1 idx=$2 octet=$3 url=$4 pattern=$5
     set_name=build-$os
-    st=$(state_dir "$set_name")
+    st=$(new_state_dir "$set_name")
     rm -f "$st/known_hosts"
     [ -f "$st/id_ed25519" ] || ssh-keygen -q -t ed25519 -N '' -C "wpci-$set_name" -f "$st/id_ed25519"
     ip=$CI_NET.$octet
@@ -84,11 +90,12 @@ build() {
     group "$os: create $name ($vmid)"
     # KEEP_FAILED=1 leaves a failed build running to look at, with this
     # machine's ~/.ssh/id_*.pub let in as ci (passwordless sudo) beside the
-    # build key; the next build of that OS clears it.
+    # build key; the next build of that OS clears it. Otherwise the build
+    # key goes with the VM, as it does when the build succeeds.
     if [ -n "${KEEP_FAILED:-}" ]; then
         trap 'keep_for_debugging' EXIT
     else
-        trap 'pve_destroy "$vmid" "$name" || true' EXIT
+        trap 'pve_destroy "$vmid" "$name" || true; drop_state' EXIT
     fi
     pve_task "$(pve POST "/nodes/$PVE_NODE/qemu" \
         --data-urlencode "vmid=$vmid" --data-urlencode "name=$name" \
@@ -146,6 +153,7 @@ build() {
         pve_destroy "$old" "$oldname" || log "kept $oldname ($old): still has clones"
     fi
     endgroup
+    drop_state
     log "$os: template $name ($vmid)"
 }
 

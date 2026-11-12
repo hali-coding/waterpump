@@ -2,6 +2,14 @@
 # POSIX sh plus `local`: the controller is Debian (dash), a workstation may
 # be anything, and every /bin/sh we meet -- dash, bash, busybox -- has it.
 
+# Every script's usage is its header comment: -h/--help prints it, and a
+# missing argument prints it as the error. Checked first, before ci/.env or
+# the API, so help works on a fresh clone. A sourced file sees the
+# script's own $1 and $0.
+ci_help() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; }
+usage() { ci_help >&2; exit 2; }
+case ${1:-} in -h|--help|help) ci_help; exit 0 ;; esac
+
 # ci/.env is for a workstation. Under Actions the values come from secrets
 # and variables, and a stray .env on the runner must not override them.
 if [ -z "${GITHUB_ACTIONS:-}" ] && [ -f "$ci/.env" ]; then
@@ -31,13 +39,22 @@ endgroup() { if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::endgroup::"; fi; }
 
 need() { for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die "$c is required"; done; }
 
-# Everything one set keeps between scripts: its ssh key, known_hosts, the
-# node list it was brought up with. A dev cluster's lives in ci/.state so
-# it survives; under Actions it is the job's temp dir, gone with the job.
+# Everything one set keeps between scripts while it is up: its ssh key,
+# known_hosts, the node list it was brought up with, the UI login. A dev
+# cluster's lives in ci/.state so it survives between commands; under
+# Actions it is the job's temp dir. It lasts exactly as long as the set:
+# up.sh makes it (new_state_dir), down.sh removes it, so with nothing up
+# ci/.state is empty. state_dir only names it -- making it on every lookup
+# left an empty directory behind for every script run against a set that
+# was not up.
 state_dir() {
     local d
     d=${CI_STATE_DIR:-${RUNNER_TEMP:+$RUNNER_TEMP/wpci}}
-    d=${d:-$ci/.state}/$1
+    echo "${d:-$ci/.state}/$1"
+}
+new_state_dir() {
+    local d
+    d=$(state_dir "$1")
     mkdir -p "$d" && chmod 700 "$d"
     echo "$d"
 }

@@ -44,7 +44,7 @@ can follow what is happening without a shell on each host:
   ```bash
   waterpump logs                   # the last 50 events, from every node
   waterpump logs -f                # ...and keep following
-  waterpump logs -f -n 0 --node prdev2 --kind change
+  waterpump logs -f -n 0 --node nodeB --kind change
   waterpump logs --req 3cbcc6f8    # one request, everywhere
   waterpump logs -f --json | jq .  # one JSON event per line
   ```
@@ -102,8 +102,8 @@ nothing is skipped or repeated, even though nodes answer at different times:
 ## What a line looks like
 
 ```
-request action=containers.state req=052d43ed actor=hampus role=admin via=session channel=ui route="POST /api/containers/{}/state" node=prdev2 target=web-1 client=192.168.75.20 result=ok ms=4629 verb=stop
-change action=instance.state req=052d43ed actor=hampus role=admin via=session channel=peer origin=orange origin_channel=ui result=ok instance=web-1 state=stop
+request action=containers.state req=052d43ed actor=alice role=admin via=session channel=ui route="POST /api/containers/{}/state" node=nodeB target=web-1 client=192.0.2.20 result=ok ms=4629 verb=stop
+change action=instance.state req=052d43ed actor=alice role=admin via=session channel=peer origin=nodeC origin_channel=ui result=ok instance=web-1 state=stop
 ```
 
 The first word is the kind of event:
@@ -131,9 +131,9 @@ The fields every line starts with:
 `ui` and `api` are told apart by a header the web UI sends. That is
 attribution, not security: any client can claim to be the UI.
 
-**One action across nodes.** When a person on orange stops an instance on
-prdev2, orange logs the `request` with `node=prdev2`. prdev2 logs the same
-`req` as `channel=peer origin=orange`, keeping the person as `actor`, and logs
+**One action across nodes.** When a person on nodeC stops an instance on
+nodeB, nodeC logs the `request` with `node=nodeB`. nodeB logs the same
+`req` as `channel=peer origin=nodeC`, keeping the person as `actor`, and logs
 the daemon `change` that followed. Grep every node's log for that one `req` to
 see the whole thing. Work that runs in the background, such as a template
 launch, a stack run or an image fetch, keeps the `req` and actor of whoever

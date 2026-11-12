@@ -26,6 +26,8 @@ modules/           # bootstrap modules (POSIX sh); _prelude.sh is prepended to e
 web/               # Vite + React + TypeScript UI; builds to web/dist, not in git
 systemd/           # service units and installer
 docs/              # the user documentation
+.github/           # workflows; scripts/ holds the release bundle and the daemon smoke test
+ci/                # the cluster CI on Proxmox: templates, VM sets, tests (ci/README.md)
 ```
 
 The design behind those layers -- why each module is shaped the way it is --
@@ -168,6 +170,8 @@ How it is put together, and why:
   - The VMs are on a private bridge, `172.31.0.0/24`, NAT'd to the internet
     and barred from the LAN and from the host itself; only the controller
     may reach the host, and only its API.
+  - IPv6 is off on every VM and template. The network has none, and with it
+    on, snap downloads stall.
   - Only the LAN hosts listed in `CI_TRUSTED_SRC` may connect in, through a
     static route via the host.
   - Each run's ssh key is generated in the job and gone with it.

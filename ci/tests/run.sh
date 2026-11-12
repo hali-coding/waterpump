@@ -17,7 +17,8 @@ set -eu
 ci=$(cd "$(dirname "$0")/.." && pwd)
 . "$ci/lib/common.sh"
 
-SET=${1:?usage: run.sh <set> [filter]}
+[ $# -ge 1 ] || usage
+SET=$1
 filter=${2:-}
 NODES=$(state_dir "$SET")/nodes
 [ -f "$NODES" ] || die "set $SET is not up"
