@@ -22,7 +22,8 @@ provisioning in `images/`.
   NVMe. RAM is the constraint: one set of four VMs at a time (~10 GB at peak).
 - **Network:** `vmbr1` = `172.31.0.0/24`, with the host at `.1`. The host NATs
   traffic to the internet only. From the LAN, only `CI_TRUSTED_SRC` may
-  connect in, and the VMs cannot reach the LAN.
+  connect in, and the VMs cannot reach the LAN. Nor the host itself: from
+  the bridge it answers ping and, for the controller only, the API (8006).
 - **VMs:**
 
   | VMID | What | IP |

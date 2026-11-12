@@ -73,6 +73,19 @@ mkdir -p /etc/waterpump-ci
     # LAN it sits behind.
     echo "    iifname \"$PVE_BRIDGE\" ip daddr $lan_net drop"
     echo "  }"
+    # The forward chain never sees traffic *to* this host: whatever a VM
+    # sends to any of the host's addresses (the bridge's .1 or its LAN IP)
+    # is delivered locally through input. So the host is closed to the
+    # bridge too, but for the API -- and that only from the controller
+    # (ci/host/controller.sh puts it at .10), the one thing that calls it;
+    # test VMs never do, and must not be able to try logins on it.
+    echo "  chain input {"
+    echo "    type filter hook input priority filter; policy accept;"
+    echo "    iifname \"$PVE_BRIDGE\" ct state established,related accept"
+    echo "    iifname \"$PVE_BRIDGE\" ip saddr $CI_NET.10 tcp dport 8006 accept"
+    echo "    iifname \"$PVE_BRIDGE\" icmp type echo-request accept"
+    echo "    iifname \"$PVE_BRIDGE\" drop"
+    echo "  }"
     echo "}"
 } > /etc/waterpump-ci/wpci.nft
 cat > /etc/systemd/system/waterpump-ci-net.service <<EOF

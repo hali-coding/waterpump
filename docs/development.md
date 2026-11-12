@@ -164,7 +164,8 @@ How it is put together, and why:
   trusted.
 - **The network:**
   - The VMs are on a private bridge, `172.31.0.0/24`, NAT'd to the internet
-    and barred from the LAN.
+    and barred from the LAN and from the host itself; only the controller
+    may reach the host, and only its API.
   - Only the LAN hosts listed in `CI_TRUSTED_SRC` may connect in, through a
     static route via the host.
   - Each run's ssh key is generated in the job and gone with it.
