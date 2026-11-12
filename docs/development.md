@@ -115,6 +115,65 @@ as good as root on that VM. So:
   PR's workflows run from the PR's copy of the files, so a fork could simply
   delete the condition.
 
+## The cluster CI job
+
+`cluster.yml` is what nothing else checks: federation, both daemons side by
+side, and the OSes waterpump is installed on. Each run brings up four fresh VMs
+on a dedicated Proxmox host:
+
+- Ubuntu 26.04 on LXD 6 (the current LTS, snap)
+- AlmaLinux 10 on LXD 5.21 (the previous LTS, snap), SELinux off
+- Debian 13 on Incus 6.0 (LTS, Debian's package)
+- Fedora 45 on Incus (a recent release, Fedora's package)
+
+Each daemon runs on one node at the oldest version a cluster member may run
+(`MIN_CLUSTER_VERSION` in `lxd.py`) and on one recent one, so a change that
+only works on new daemons fails here rather than for a user.
+
+It installs this commit as the ci user's systemd service on each VM, forms a
+cluster, and runs `ci/tests/`. `pr.yml` calls it beside `daemon.yml`, gated the
+same way. It can also be started by hand. Every step is a script under `ci/`
+that also runs from a workstation. `ci/README.md` has the commands, and
+`ci/dev-cluster.sh` keeps a cluster up for manual testing.
+
+How it is put together, and why:
+
+- **Templates, then linked clones.** `ci-images.yml` (weekly, or by hand)
+  builds one template per OS. Each has the daemon installed and the test
+  images pulled. A run takes ZFS linked clones of the newest templates and
+  only sets each clone's address and key. That turns about ten minutes of
+  installing per VM into seconds. A failed template build leaves the
+  previous template in use.
+- **RAM is the budget.** The host has 16 GB. Four VMs at 2.5 GB, with
+  ballooning down to 1.5 GB, fit beside the host and the 1 GB controller. So
+  one set runs at a time: every job shares the `waterpump-pve` concurrency
+  group, and a dev cluster and a CI run refuse each other. That refusal is
+  atomic: `up.sh` first creates an empty VM at a fixed VMID, which Proxmox
+  lets only one caller do, and `down.sh` removes it last. Other settings
+  serve the same budget:
+  - The ZFS ARC is capped at 1 GB.
+  - KSM starts merging early.
+  - Guests swap to a 1 GB file, not to zram.
+  - The UI is built on a hosted runner.
+- **Fixed slots.** The CI set is always VMIDs 201–204. `up.sh` starts by
+  destroying whatever is there, so a run that died is cleaned up by the
+  next one. Every delete checks the VM's name against `ci/nodes.conf` first.
+- **The runner holds nothing.** The runner is the controller VM. It sits
+  outside the `ci` pool, and the jobs' API token (repository secrets
+  `PVE_API_URL`, `PVE_TOKEN_ID`, `PVE_TOKEN_SECRET`, `PVE_TLS_PIN`) is
+  limited to that pool. A job that runs hostile code can wreck CI VMs, not
+  the host or the controller. The host's certificate is pinned by key, not
+  trusted.
+- **The network:**
+  - The VMs are on a private bridge, `172.31.0.0/24`, NAT'd to the internet
+    and barred from the LAN and from the host itself; only the controller
+    may reach the host, and only its API.
+  - Only the LAN hosts listed in `CI_TRUSTED_SRC` may connect in, through a
+    static route via the host.
+  - Each run's ssh key is generated in the job and gone with it.
+
+The same rules as `daemon.yml` keep forks and Dependabot off the runner.
+
 ## Releases
 
 Releases are cut by [release-please](https://github.com/googleapis/release-please)

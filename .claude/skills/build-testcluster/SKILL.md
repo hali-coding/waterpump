@@ -179,3 +179,13 @@ repos/hali-coding/waterpump/actions/runners/registration-token`:
 The runner was registered with the repo's fork-PR approval set to
 `all_external_contributors`. Keep it that way: the repo is public, and the
 runner user is root-equivalent through the daemon group.
+
+## The CI host
+
+A separate 16 GB Proxmox host runs `cluster.yml`. It is scripted end to end in
+`ci/` (read `ci/README.md`). Do not hand-build VMs there. Its name, address
+and sudo login are in the gitignored `ci/.env` (`PVE_NODE`, `PVE_LAN_IP`,
+`PVE_SSH`), never in the repo. Its CI bridge, `172.31.0.0/24`, is routed from
+the workstation (`ci/workstation-route.sh`). For a throwaway cluster on it,
+use `ci/dev-cluster.sh up`. The `ci` set (201–204) belongs to GitHub Actions;
+leave it alone.

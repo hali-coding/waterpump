@@ -1,5 +1,5 @@
 #cloud-config
-# image: https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
+# image: https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2
 # Debian 13 with both daemons (Incus from Debian, LXD from snap) and what
 # ./build.sh needs. Debian's npm drags in 600+ node-* packages: first boot
 # takes ~12 minutes, most of it that.

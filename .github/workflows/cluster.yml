@@ -1,0 +1,95 @@
+# The cluster check: four fresh VMs on the CI Proxmox host -- Ubuntu and
+# Alma on LXD, Debian and Fedora on Incus -- with this commit's waterpump
+# installed as a service, federated into one cluster, then ci/tests run
+# against it. Everything it does is a script under ci/ that also runs from
+# a workstation; see ci/README.md and docs/development.md.
+#
+# The runner is the controller VM on that host (label waterpump-cluster).
+# It holds no credential of its own: the Proxmox API token comes from the
+# repo's secrets per job and is limited to the `ci` pool. The repo is
+# public and the job runs this commit's code with that token, so a fork's
+# PR must never get here -- pr.yml only calls it for same-repo PRs, and the
+# guard below repeats that for any other caller.
+name: Cluster
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Build the UI
+    # On a hosted runner: the controller has 1 GB of RAM and a Vite build
+    # would take most of it.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 1
+
+  cluster:
+    name: Four-OS cluster (LXD + Incus)
+    needs: web
+    runs-on: [self-hosted, waterpump-cluster]
+    timeout-minutes: 45
+    # One set of VMs fits the host's RAM, so runs queue rather than overlap
+    # -- and never cancel each other, since a cancelled run's VMs are only
+    # cleaned up by the next one.
+    concurrency:
+      group: waterpump-pve
+      cancel-in-progress: false
+    env:
+      PVE_API_URL: ${{ secrets.PVE_API_URL }}
+      PVE_TOKEN_ID: ${{ secrets.PVE_TOKEN_ID }}
+      PVE_TOKEN_SECRET: ${{ secrets.PVE_TOKEN_SECRET }}
+      PVE_TLS_PIN: ${{ secrets.PVE_TLS_PIN }}
+      PVE_NODE: ${{ vars.PVE_NODE }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: Bring up the VMs
+        run: ci/up.sh ci
+
+      - name: Install waterpump
+        run: ci/install.sh ci
+
+      - name: Form the cluster
+        run: ci/cluster.sh ci
+
+      - name: Tests
+        run: ci/tests/run.sh ci
+
+      - name: Collect logs
+        if: failure()
+        run: ci/collect.sh ci "$RUNNER_TEMP/cluster-logs"
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cluster-logs
+          path: ${{ runner.temp }}/cluster-logs
+          retention-days: 14
+
+      - name: Tear down
+        if: always()
+        run: ci/down.sh ci
