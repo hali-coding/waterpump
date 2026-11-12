@@ -6,7 +6,8 @@
 #
 # Whatever is left in the set's slots from an earlier run is destroyed
 # first, so a run that died halfway heals on the next one. The other set
-# must not be up: 16 GB holds one set, not two.
+# must not be up: 16 GB holds one set, not two, and the host hold
+# (pve_hold in lib/pve.sh) makes sure of it.
 set -eu
 ci=$(cd "$(dirname "$0")" && pwd)
 . "$ci/lib/common.sh"
@@ -18,16 +19,17 @@ count=${2:-}
 case $set in ci) other=dev ;; dev) other=ci ;; *) die "unknown set $set (ci or dev)" ;; esac
 [ -n "$(conf_nodes "$set")" ] || die "nodes.conf has no set $set"
 
+pve_hold "$set"
+# The hold is what keeps the sets apart; the other set's VMs being here
+# anyway means one was made before holds existed, or by hand.
 vms=$(pve_vms)
 busy=$(conf_nodes "$other" | while read -r vmid name _; do
     printf '%s' "$vms" | jq -r --argjson id "$vmid" --arg n "$name" \
         '.[] | select(.vmid == $id and .name == $n) | .name'
 done)
 if [ -n "$busy" ]; then
-    case $other in
-        dev) die "the dev cluster is up ($(echo $busy)); bring it down first: ci/dev-cluster.sh down" ;;
-        *) die "a CI run holds the host ($(echo $busy)); wait for it, or ci/down.sh ci if it is stale" ;;
-    esac
+    pve_release "$set"
+    die "the $other set's VMs are still here ($(echo $busy)): ci/down.sh $other"
 fi
 
 st=$(state_dir "$set")

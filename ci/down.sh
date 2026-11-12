@@ -21,5 +21,7 @@ group "destroy $set"
     ssh $(ssh_opts "$set") -O exit "ci@$CI_NET.$octet" </dev/null 2>/dev/null || true
 done < "$st/nodes"
 conf_nodes "$set" | while read -r vmid name _; do pve_destroy "$vmid" "$name"; done
+# Last, once the VMs are gone: the hold is what keeps the other set out.
+pve_release "$set"
 rm -f "$st/nodes" "$st/known_hosts" "$st"/install-*.log "$st/waterpump.tar.gz"
 endgroup

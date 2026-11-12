@@ -81,3 +81,43 @@ pve_template_for() {
 
 # PVE wants sshkeys URL-encoded inside the form field (and %20, not +).
 pve_sshkeys() { jq -sRr @uri "$@"; }
+
+# The host holds one set of VMs at a time, and the hold is a VM: an empty
+# placeholder (no disk, never started) at a fixed VMID, named after the set
+# holding it. Creating a VM at a taken VMID fails inside Proxmox, so taking
+# the hold is atomic across everyone with the token -- a workstation and a
+# CI run starting together cannot both get it, which looking for the other
+# set's VMs first could not promise.
+HOLD_VMID=${CI_HOLD_VMID:-200}
+
+# pve_hold <set>: take the host for <set>, or die naming who has it. A hold
+# already in <set>'s name is taken over: that is a run that died, and its
+# slots are about to be cleared anyway.
+pve_hold() {
+    local set=$1 owner
+    if pve_task "$(pve POST "/nodes/$PVE_NODE/qemu" \
+        --data-urlencode "vmid=$HOLD_VMID" --data-urlencode "name=wpci-hold-$set" \
+        --data-urlencode "pool=$CI_POOL" --data-urlencode memory=16 \
+        --data-urlencode "description=waterpump CI: the host is held by the $set set (${GITHUB_RUN_ID:+run $GITHUB_RUN_ID, }since $(date -u +%FT%TZ)). ci/down.sh $set releases it." 2>/dev/null)" 2>/dev/null; then
+        return 0
+    fi
+    # Losing a race means the winner's create is still in flight, and the
+    # cluster listing shows its VM only a moment later: give it that moment.
+    local i=0
+    while owner=$(pve_name_of "$HOLD_VMID"); [ -z "$owner" ] && [ "$i" -lt 5 ]; do
+        i=$((i + 1)); sleep 2
+    done
+    case $owner in
+        "wpci-hold-$set") log "taking over $owner (left by an earlier run)" ;;
+        wpci-hold-dev) die "the dev cluster holds the host; bring it down first: ci/dev-cluster.sh down" ;;
+        wpci-hold-ci) die "a CI run holds the host; wait for it, or ci/down.sh ci if it is stale" ;;
+        "") die "could not create the host hold (VMID $HOLD_VMID): does the token still have VM.Allocate on the $CI_POOL pool?" ;;
+        *) die "VMID $HOLD_VMID is '$owner', not a waterpump hold: set CI_HOLD_VMID to a free VMID" ;;
+    esac
+}
+
+# pve_release <set>: give the host up, if <set> holds it.
+pve_release() {
+    [ "$(pve_name_of "$HOLD_VMID")" = "wpci-hold-$1" ] || return 0
+    pve_destroy "$HOLD_VMID" "wpci-hold-$1"
+}

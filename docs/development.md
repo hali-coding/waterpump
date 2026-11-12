@@ -147,7 +147,9 @@ How it is put together, and why:
 - **RAM is the budget.** The host has 16 GB. Four VMs at 2.5 GB, with
   ballooning down to 1.5 GB, fit beside the host and the 1 GB controller. So
   one set runs at a time: every job shares the `waterpump-pve` concurrency
-  group, and a dev cluster and a CI run refuse each other. Other settings
+  group, and a dev cluster and a CI run refuse each other. That refusal is
+  atomic: `up.sh` first creates an empty VM at a fixed VMID, which Proxmox
+  lets only one caller do, and `down.sh` removes it last. Other settings
   serve the same budget:
   - The ZFS ARC is capped at 1 GB.
   - KSM starts merging early.

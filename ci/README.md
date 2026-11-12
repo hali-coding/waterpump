@@ -30,6 +30,7 @@ provisioning in `images/`.
   |---|---|---|
   | 100 | `wpci-controller`, the GitHub runner (`waterpump-cluster`), outside the `ci` pool | `.10` |
   | 9001–9004 / 9101–9104 | templates `wpci-<os>-<stamp>`, two slots each, newest wins | `.91–.94` while building |
+  | 200 | `wpci-hold-<set>`, an empty VM that says which set holds the host (`pve_hold`) | – |
   | 201–204 | the `ci` set, created and destroyed every run | `.21–.24` |
   | 211–214 | the `dev` set (`dev-cluster.sh`), kept until taken down | `.31–.34` |
 - **Access:** an API token `ci@pve!ci` with role `WaterpumpCI`. It covers the
