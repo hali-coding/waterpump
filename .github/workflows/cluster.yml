@@ -36,7 +36,7 @@ jobs:
       - run: npm ci
         working-directory: web
       - run: ./build.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-dist
           path: web/dist
@@ -83,7 +83,7 @@ jobs:
         if: failure()
         run: ci/collect.sh ci "$RUNNER_TEMP/cluster-logs"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: cluster-logs
