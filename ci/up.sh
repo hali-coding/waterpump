@@ -4,6 +4,14 @@
 #   ci/up.sh ci            # the four CI nodes (cluster.yml)
 #   ci/up.sh dev [2]       # the dev cluster, or only its first two nodes
 #
+# Log in to a node as ci (passwordless sudo) with the set's own key:
+#
+#   ssh -i ci/.state/<set>/id_ed25519 -o UserKnownHostsFile=ci/.state/<set>/known_hosts ci@<ip>
+#
+# The dev set also lets in this workstation's ~/.ssh/id_*.pub, so plain
+# `ssh ci@<ip>` or `ci/dev-cluster.sh ssh <n>` works there. Addresses are in
+# nodes.conf: <CI_NET>.21-.24 for ci, .31-.34 for dev.
+#
 # Whatever is left in the set's slots from an earlier run is destroyed
 # first, so a run that died halfway heals on the next one. The other set
 # must not be up: 16 GB holds one set, not two, and the host hold
@@ -14,7 +22,8 @@ ci=$(cd "$(dirname "$0")" && pwd)
 . "$ci/lib/pve.sh"
 need ssh ssh-keygen
 
-set=${1:?usage: up.sh <set> [count]}
+[ $# -ge 1 ] || usage
+set=$1
 count=${2:-}
 case $set in ci) other=dev ;; dev) other=ci ;; *) die "unknown set $set (ci or dev)" ;; esac
 [ -n "$(conf_nodes "$set")" ] || die "nodes.conf has no set $set"
@@ -32,7 +41,7 @@ if [ -n "$busy" ]; then
     die "the $other set's VMs are still here ($(echo $busy)): ci/down.sh $other"
 fi
 
-st=$(state_dir "$set")
+st=$(new_state_dir "$set")
 rm -f "$st/known_hosts"
 [ -f "$st/id_ed25519" ] || ssh-keygen -q -t ed25519 -N '' -C "wpci-$set" -f "$st/id_ed25519"
 keys=$st/authorized_keys

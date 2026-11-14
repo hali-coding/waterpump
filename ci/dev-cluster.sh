@@ -5,8 +5,9 @@
 #   ci/dev-cluster.sh up [--small]   four nodes (two with --small), this checkout installed
 #   ci/dev-cluster.sh update         reinstall this checkout on every node, keep their state
 #   ci/dev-cluster.sh status         VMs and cluster membership
-#   ci/dev-cluster.sh ssh <n> [cmd] a shell on node n (1-based) as ci, or run cmd there
-#   ci/dev-cluster.sh ui <n|name>    tunnel node n's UI to https://localhost:8099
+#   ci/dev-cluster.sh ssh <n> [cmd]  a shell on node n (1-based) as ci, or run cmd there
+#   ci/dev-cluster.sh login          each node's UI address, and the login cluster.sh made
+#   ci/dev-cluster.sh ui <n|name>    tunnel node n's UI to https://localhost:8099, without the route
 #   ci/dev-cluster.sh test [filter]  run ci/tests against it
 #   ci/dev-cluster.sh down           destroy it
 #
@@ -51,7 +52,7 @@ case $cmd in
         "$ci/up.sh" $SET $count
         "$ci/install.sh" $SET
         "$ci/cluster.sh" $SET
-        log "up. ssh: ci/dev-cluster.sh ssh 1   UI: ci/dev-cluster.sh ui 1"
+        log "up. ssh: ci/dev-cluster.sh ssh 1   UI and login: ci/dev-cluster.sh login"
         ;;
     update)
         web_fresh
@@ -64,7 +65,8 @@ case $cmd in
         [ -f "$st/nodes" ] && wp $SET "$(node_ip 1)" cluster status || true
         ;;
     ssh)
-        ip=$(node_ip "${1:?which node}"); shift
+        [ $# -ge 1 ] || usage
+        ip=$(node_ip "$1"); shift
         # With a command, run it there (`ssh 2 ./waterpump status`);
         # without one, a login shell in the checkout.
         # shellcheck disable=SC2046
@@ -74,13 +76,20 @@ case $cmd in
         exec ssh $(ssh_opts $SET) -t "ci@$ip" 'cd ~/waterpump; exec $SHELL -l'
         ;;
     ui)
-        ip=$(node_ip "${1:?which node}")
+        [ $# -ge 1 ] || usage
+        ip=$(node_ip "$1")
         port=${2:-8099}
-        # The tunnel must end at the node's loopback: a cluster member
-        # answers any other caller with a 401, even with auth off.
+        # Only for a machine without the route to the CI bridge: the nodes
+        # have local logins on, so the UI answers on their own address.
         log "https://localhost:$port -> $ip (Ctrl-C to close)"
         # shellcheck disable=SC2046
         exec ssh $(ssh_opts $SET) -N -o ControlMaster=no -L "$port:127.0.0.1:8099" "ci@$ip"
+        ;;
+    login)
+        f=$(state_dir $SET)/login
+        [ -f "$f" ] || die "no login recorded (ci/cluster.sh $SET makes one)"
+        awk -v net="$CI_NET" '{ print "https://" net "." $4 ":8099  " $2 }' "$(state_dir $SET)/nodes"
+        grep -v '^url=' "$f"
         ;;
     test)
         exec "$ci/tests/run.sh" $SET "${1:-}"
@@ -89,7 +98,6 @@ case $cmd in
         "$ci/down.sh" $SET
         ;;
     *)
-        sed -n '4,11p' "$0" | sed 's/^# *//' >&2
-        exit 2
+        usage
         ;;
 esac

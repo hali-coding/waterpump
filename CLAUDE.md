@@ -30,11 +30,15 @@ sh -n modules/foo.sh                # modules must parse as POSIX sh
 WATERPUMP_FLAVOR=incus ./waterpump status  # force the other daemon
 WATERPUMP_DATA_DIR=/tmp/n1 ./waterpump cluster status  # a second node's state, for testing federation
 ./systemd/install-service.sh        # install as a systemd --user unit (see systemd/)
+ci/dev-cluster.sh up                # four-OS cluster (LXD + Incus) of this checkout on the CI host
+ci/dev-cluster.sh ssh 1 [cmd]       # a shell (or one command) on node 1; `update` re-pushes the checkout
 ```
 
-There is **no test suite** and no test runner configured. Verify changes by running the CLI
-or the server against a live daemon. `./waterpump status` reports which socket and flavor it
-resolved; `--json` on any CLI command prints the same payload the REST API returns.
+There is **no unit test suite**. Verify changes by running the CLI or the server against a
+live daemon. `./waterpump status` reports which socket and flavor it resolved; `--json` on
+any CLI command prints the same payload the REST API returns. The integration tests are
+`.github/scripts/daemon_smoke.sh` (one node) and `ci/tests/` (a four-node mixed cluster,
+see "Cluster CI" below); `ci/dev-cluster.sh test` runs the latter against a dev cluster.
 
 ## Hard constraints
 
@@ -964,6 +968,47 @@ retried in-process, since it may already have started. `--no-serve` keeps the ol
 are re-sent on every poll.
 `BootstrapPanel` (modules on an existing container) still keeps its progress in component
 state.
+
+### Cluster CI (`ci/`)
+
+`ci/` is the POSIX sh that runs `cluster.yml` on a dedicated Proxmox host,
+and the same scripts run from a workstation -- the workflow is only the
+order of calls. `ci/README.md` has the commands, `docs/development.md` the
+design; what follows is what is easy to break.
+
+- **Two layers, like the backend.** `lib/common.sh` (settings from the
+  gitignored `ci/.env`, ssh, `nodes.conf`) and `lib/pve.sh` (the Proxmox REST
+  API, curl + jq). Scripts never ssh to the host: the CI token is limited to
+  the `ci` pool, which is what keeps a hostile PR to the CI VMs. Only
+  `ci/host/*.sh`, run by a person, use the host's root.
+- **Nothing site-specific in git.** The repo is public: host names, LAN
+  addresses and secrets live in `ci/.env` (mode 600) and the repo's
+  secrets/variables (`PVE_NODE` is a variable); committed files use
+  placeholders (192.0.2.x). Secrets never reach argv -- `pve()` gives curl the
+  token as a `-K -` config on stdin, `apply.sh` writes it to `.env` via the
+  environment, `gh secret set` reads stdin.
+- **One set at a time, taken atomically.** 16 GB fits one four-VM set.
+  `pve_hold()` creates an empty VM at a fixed VMID (200) named for the set:
+  Proxmox lets only one caller create it, so a CI run and a dev cluster can
+  never both start. `down.sh` releases it last. Slots are fixed VMIDs and
+  every delete checks the VM's name first (`pve_destroy()`), so a reused VMID
+  is refused, never deleted.
+- **Templates, not installs.** `build-templates.sh` makes one golden template
+  per OS (`images.conf`, provisioning in `images/<os>.sh` between
+  `common-pre.sh` and `common-post.sh`), into whichever of two VMID slots is
+  free; a run linked-clones the newest. A provisioning script that exits 100
+  asks for a reboot and a rerun (new kernel, SELinux off). A failed build
+  keeps the previous template; an old one with clones survives until the
+  next build. `KEEP_FAILED=1` keeps a failed build VM to log in to.
+- **IPv6 is off on every CI VM** (`/etc/sysctl.d/90-wpci-no-ipv6.conf`, in
+  `common-pre.sh` and `controller.sh`): the network has none, and with it
+  on the snap store stalls. Keep it in any new image.
+- **Each daemon at its floor and a recent version.** The matrix in
+  `ci/README.md` puts LXD and Incus each on one node at `MIN_CLUSTER_VERSION`
+  and one newer; raising the floor in `lxd.py` means moving that node too.
+- **Every script takes `--help`**, printing its header comment
+  (`ci_help` in common.sh, before `.env` is read), so a script's header *is*
+  its usage text -- keep it current when changing arguments.
 
 ## Style
 

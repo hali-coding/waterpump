@@ -92,7 +92,7 @@ every node:
 ```bash
 waterpump image-prune --dry-run  # what each node would delete, and what it keeps and why
 waterpump image-prune            # the same, then asks before deleting
-waterpump image-prune --node prdev2 -y
+waterpump image-prune --node nodeB -y
 ```
 
 Downloaded means pulled from a remote: the daemon's cache, an image with a

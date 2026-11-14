@@ -439,7 +439,7 @@ the strip marks each swarm `passed`, `running`, `queued`, `failed` or
 **One at a time, cluster-wide.** A run lives on the node that started it, so
 before a stack launches, relaunches, is destroyed, or swarms, every other
 member is asked whether it is running that stack. One that is refuses the
-start ("busy with a swarm heavy on prdev1"), and the preview says so. A member
+start ("busy with a swarm heavy on nodeA"), and the preview says so. A member
 that does not answer is passed over. **Stop** works from any node: a swarm
 running on another member is stopped there. Each run of a swarm also tags its
 instances with its own run (`user.waterpump.swarm-run`), and its teardown takes

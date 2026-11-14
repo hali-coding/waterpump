@@ -93,7 +93,7 @@ stop a peer reaching it:
 ```
 This node
   name            nodeA
-  address         https://192.168.75.158:8099
+  address         https://192.0.2.158:8099
   fingerprint     0e:9a:f0:b4:43:6f:b4:ff:…
   cluster         member of 3 node(s)
   new members     accepted
@@ -137,7 +137,7 @@ checked again.
 
 ```
 + joined the cluster through nodeA -- now a member alongside nodeA, nodeB
-  this node is nodeC at https://192.168.75.192:8099
+  this node is nodeC at https://192.0.2.192:8099
 ```
 
 What happens:
@@ -214,9 +214,9 @@ so and simply drops the peer records and node groups:
 
 ```
 $ waterpump cluster leave
-+ left the cluster (forgot prdev1, prdev2)
++ left the cluster (forgot nodeA, nodeB)
 ! This node had no cluster credential, so no member could be told it has gone.
-  Any that still list 'orange' need `waterpump cluster evict orange` run there.
+  Any that still list 'nodeC' need `waterpump cluster evict nodeC` run there.
 ```
 
 The Cluster tab shows the same state as a banner, with the button reading **Clear
@@ -331,8 +331,8 @@ A node can be put into maintenance before you work on the host:
 
 ```bash
 waterpump cluster maintenance on --reason "kernel upgrade"    # this node
-waterpump cluster maintenance on --node prdev2 --reason "disk swap"
-waterpump cluster maintenance off --node prdev2
+waterpump cluster maintenance on --node nodeB --reason "disk swap"
+waterpump cluster maintenance off --node nodeB
 ```
 
 or with **Maintenance** / **End maintenance** on its card in the Cluster tab.
@@ -498,8 +498,8 @@ refused, since the run would die with `top`. When authentication is on, `top` ca
 answer, which is what the drawer is built on:
 
 ```bash
-curl .../api/nodes/prdev2/containers/web-1                 # its detail
-curl -X POST .../api/nodes/prdev2/containers/web-1/exec \
+curl .../api/nodes/nodeB/containers/web-1                 # its detail
+curl -X POST .../api/nodes/nodeB/containers/web-1/exec \
      -d '{"command":"uptime"}'                             # a console command
 ```
 
@@ -595,7 +595,7 @@ copy left behind on one node is drift that a push-only sync can never clear.
 ```
 $ waterpump template-save web --image images:alpine/3.24
 + saved template web: images:alpine/3.24
-  + synced to 2 node(s): prdev1, prdev2
+  + synced to 2 node(s): nodeA, nodeB
 ```
 
 It works from whichever node you are on — there is no primary — and a node that
@@ -608,7 +608,7 @@ back with the record, and a node that missed out is named:
 ```
 $ waterpump template-save web --image images:alpine/3.24
 + saved template web: images:alpine/3.24
-  ! not synced to prdev2 (Cannot reach https://…:8099: Connection refused)
+  ! not synced to nodeB (Cannot reach https://…:8099: Connection refused)
     -- run `waterpump cluster sync` when they are back
 ```
 
@@ -656,12 +656,12 @@ is reported:
 
 ```
 $ waterpump cluster reconcile
-? templates/web differs on prdev2 -- push the copy that is right with `waterpump cluster sync`
-0 change(s), 1 conflict(s), against prdev1, prdev2
+? templates/web differs on nodeB -- push the copy that is right with `waterpump cluster sync`
+0 change(s), 1 conflict(s), against nodeA, nodeB
 ```
 
 You resolve it by pushing whichever copy is right, with `waterpump cluster sync
---name web --node prdev2` or **Sync** in the UI. A copy that is merely out of
+--name web --node nodeB` or **Sync** in the UI. A copy that is merely out of
 date is not an emergency; being unable to see that it is would be.
 
 Two things it deliberately does not do:

@@ -10,7 +10,7 @@ against an existing one.
 ./waterpump modules                   # what is available
 ./waterpump create dev -i images:debian/12 \
     -b base -b ssh-access \
-    --param USERNAME=hampus --all-ssh-keys
+    --param USERNAME=alice --all-ssh-keys
 ./waterpump bootstrap dev -b docker   # add more later; modules are re-runnable
 ```
 
@@ -130,7 +130,7 @@ worked last time. The UI marks these *saved* and shows the module's original
 value beside them, with *Reset* to go back to it.
 
 ```bash
-./waterpump module-set ssh-access --param USERNAME=hampus --param SHELL_PATH=/bin/sh
+./waterpump module-set ssh-access --param USERNAME=alice --param SHELL_PATH=/bin/sh
 ```
 
 **Bootstrap profiles** are named module selections with their parameters and
@@ -138,7 +138,7 @@ SSH public keys — "Save as profile" in the create dialog, or:
 
 ```bash
 ./waterpump profile-save "Web server" -b base -b ssh-access -b docker \
-    --param USERNAME=hampus --all-ssh-keys --description "my usual dev box"
+    --param USERNAME=alice --all-ssh-keys --description "my usual dev box"
 ./waterpump profiles
 ./waterpump create web -P "Web server"
 ```
@@ -188,8 +188,8 @@ real name inside it:
   "name": "Web server",
   "description": "my usual dev box",
   "modules": ["base", "ssh-access", "docker"],
-  "params": { "USERNAME": "hampus", "SHELL_PATH": "/bin/bash" },
-  "ssh_keys": ["ssh-ed25519 AAAA… hampus@laptop"]
+  "params": { "USERNAME": "alice", "SHELL_PATH": "/bin/bash" },
+  "ssh_keys": ["ssh-ed25519 AAAA… alice@laptop"]
 }
 ```
 

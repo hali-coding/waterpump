@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install this checkout of waterpump on every node of a set, as the ci
-# user's systemd service, the way the build-testcluster skill does by hand:
+# user's systemd service with the drop-in from docs/service.md:
 #
 #   ci/install.sh ci
 #
@@ -12,7 +12,8 @@ set -eu
 ci=$(cd "$(dirname "$0")" && pwd)
 . "$ci/lib/common.sh"
 
-set=${1:?usage: install.sh <set>}
+[ $# -ge 1 ] || usage
+set=$1
 st=$(state_dir "$set")
 [ -f "$st/nodes" ] || die "set $set is not up (ci/up.sh $set)"
 [ -f "$repo/web/dist/index.html" ] || log "warning: web/dist is not built; the nodes get no UI"
@@ -64,8 +65,10 @@ cd ~/waterpump
 sudo ./systemd/install-service.sh --fabric >/tmp/wp-fabric.log 2>&1 || { cat /tmp/wp-fabric.log; exit 1; }
 systemctl --user restart waterpump.service
 i=0
-until curl -skf -o /dev/null https://127.0.0.1:8099/api/status \
-      || curl -sf -o /dev/null http://127.0.0.1:8099/api/status; do
+# /api/auth answers without a login: cluster.sh turns auth on, and an
+# update reinstalls over that.
+until curl -skf -o /dev/null https://127.0.0.1:8099/api/auth \
+      || curl -sf -o /dev/null http://127.0.0.1:8099/api/auth; do
     i=$((i+1))
     if [ $i -ge 60 ]; then journalctl --user -u waterpump -n 40 --no-pager; exit 1; fi
     sleep 1
