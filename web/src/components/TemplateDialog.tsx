@@ -127,7 +127,7 @@ export function TemplateDialog({ template, onCancel, onSaved }: Props) {
   }
 
   return (
-    <Modal
+    <Modal size="lg"
       title={template ? `Edit “${template.name}”` : 'New template'}
       subtitle="Everything about an instance except its name, ready to launch in one click."
       onClose={busy ? () => {} : onCancel}

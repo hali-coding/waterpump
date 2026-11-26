@@ -25,7 +25,7 @@ export function LoginGate({ info, onDone }: Props) {
 
   if (!info.password_login && !acceptsTokens) {
     return (
-      <Modal title="Sign in required" onClose={() => {}}
+      <Modal size="sm" title="Sign in required" onClose={() => {}}
         footer={<button className="btn btn-primary" onClick={() => window.location.reload()}>
           Reload</button>}>
         <p style={{ margin: 0 }}>
@@ -63,7 +63,7 @@ export function LoginGate({ info, onDone }: Props) {
   const canSubmit = mode === 'token' ? !!token.trim() : !!username.trim() && !!password && !busy
 
   return (
-    <Modal
+    <Modal size="sm"
       title={mode === 'password' ? 'Log in to waterpump' : 'API token required'}
       subtitle={mode === 'password'
         ? (info.methods.includes('pam') ? 'Use your account on this host.' : undefined)

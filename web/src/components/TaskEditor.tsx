@@ -169,7 +169,7 @@ export function TaskEditor({ task, templates, modules, groups, nodes, onSaved, o
     setSecrets((rows) => rows.map((row, i) => (i === index ? { ...row, ...change } : row)))
 
   return (
-    <Modal
+    <Modal size="lg"
       title={task ? `Edit “${task.name}”` : 'New task'}
       subtitle="Job modules run in a throwaway instance of a template, on a schedule or when invoked."
       onClose={busy ? () => {} : onCancel}

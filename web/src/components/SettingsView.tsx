@@ -21,9 +21,9 @@ interface Props {
 }
 
 /**
- * Every setting in one place. Three are the cluster's, saved here and pushed
- * to every member like a template (features, health, logging); the last is
- * this node's own, how it is reached, which only it can say and which
+ * Every setting in one place. Health, logging and the experimental features
+ * are the cluster's, saved here and pushed to every member like a template;
+ * how this node is reached is its own, which only it can say and which
  * changes by restarting it -- so that one is shown, and changed through
  * Configure node or `waterpump configure`.
  */
@@ -38,10 +38,11 @@ export function SettingsView({ nodes, setup, onConfigure, onNotify, onChanged }:
             : 'for this server, and for every node that joins it later'}
         </span>
       </div>
-      <FeaturesCard canWrite={canWrite} onNotify={onNotify} onChanged={onChanged} />
       <HealthCard canWrite={canWrite} onNotify={onNotify} />
       <LoggingSettings nodes={nodes} canWrite={canWrite} onNotify={onNotify} />
       <ThisNodeCard setup={setup} canWrite={canWrite} onConfigure={onConfigure} />
+      {/* Last: switching these on is for someone who already knows the rest. */}
+      <FeaturesCard canWrite={canWrite} onNotify={onNotify} onChanged={onChanged} />
     </>
   )
 }

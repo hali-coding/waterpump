@@ -30,7 +30,7 @@ export function ConfirmDialog({
   const blocked = confirmText !== undefined && typed.trim() !== confirmText
 
   return (
-    <Modal
+    <Modal size="sm"
       title={title}
       onClose={busy ? () => {} : onCancel}
       api={api}

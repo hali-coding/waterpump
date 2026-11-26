@@ -691,7 +691,7 @@ function ModuleOutput({ part, modules }: { part: string; modules: TaskRunModule[
 
 function RunDialog({ run, onClose }: { run: TaskRun; onClose: () => void }) {
   return (
-    <Modal title={`${run.task} · run ${run.id}`}
+    <Modal size="lg" title={`${run.task} · run ${run.id}`}
       subtitle={`${run.trigger === 'schedule' ? `Scheduled for ${when(run.slot)}` : 'Invoked'}`
         + ` · on ${run.node} · ${when(run.started_at)} · ${took(run)}`}
       onClose={onClose}

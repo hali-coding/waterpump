@@ -43,7 +43,7 @@ export function AppCheckDialog({ name, node, onClose }: Props) {
   const stderr = result?.stderr.replace(/\n$/, '') ?? ''
 
   return (
-    <Modal
+    <Modal size="lg"
       title={`App check · ${name}`}
       subtitle={data
         ? `From template ${data.template}${node ? ` on ${node}` : ''} · every ${data.interval_seconds}s, timeout ${data.timeout_seconds}s`

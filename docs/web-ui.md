@@ -25,12 +25,6 @@ several names for the same reason and go through the same code.
 
 **Settings** (under Infrastructure) is every setting in one place:
 
-- **Experimental features.** Stacks and fabrics are off on a new install, and
-  their tab and Network section are hidden until switched on here (or with
-  `waterpump features-set --enable stacks`). A node upgraded from before the
-  switch existed shows each one that is already in use as on. A feature cannot
-  be switched off while anything of it exists, and the page names what. One
-  setting for the whole cluster.
 - **Health checks.** The interval and thresholds every node judges its
   instances by; see [Health checks](#health-checks). One setting for the
   whole cluster, in force without a restart.
@@ -43,6 +37,12 @@ several names for the same reason and go through the same code.
   methods, with the `waterpump configure` section for each. Only this node can
   say, so these are not shared. **Configure node** changes them and restarts
   the server.
+- **Experimental features.** Stacks and fabrics are off on a new install, and
+  their tab and Network section are hidden until switched on here (or with
+  `waterpump features-set --enable stacks`). A node upgraded from before the
+  switch existed shows each one that is already in use as on. A feature cannot
+  be switched off while anything of it exists, and the page names what. One
+  setting for the whole cluster.
 
 A shared setting saved on one node is pushed to every member at once, and a
 node that was off catches up when it comes back, like a template.
