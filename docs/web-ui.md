@@ -21,6 +21,32 @@ result, not a failure for the rest. The notification afterwards says so,
 naming only the ones that did not do as asked. `waterpump start`/`stop` take
 several names for the same reason and go through the same code.
 
+## Settings
+
+**Settings** (under Infrastructure) is every setting in one place:
+
+- **Experimental features.** Stacks and fabrics are off on a new install, and
+  their tab and Network section are hidden until switched on here (or with
+  `waterpump features-set --enable stacks`). A node upgraded from before the
+  switch existed shows each one that is already in use as on. A feature cannot
+  be switched off while anything of it exists, and the page names what. One
+  setting for the whole cluster.
+- **Health checks.** The interval and thresholds every node judges its
+  instances by; see [Health checks](#health-checks). One setting for the
+  whole cluster, in force without a restart.
+- **Logging.** The log level and remote syslog hosts (UDP or TCP). **Send
+  test message** reports how each destination took a test line, and a node
+  that was off when the settings changed is marked **behind**, with **Push to
+  …** to send them again. See [Logging](logging.md). One setting for the
+  whole cluster.
+- **This node.** How this node is reached: its address, certificate and login
+  methods, with the `waterpump configure` section for each. Only this node can
+  say, so these are not shared. **Configure node** changes them and restarts
+  the server.
+
+A shared setting saved on one node is pushed to every member at once, and a
+node that was off catches up when it comes back, like a template.
+
 ## Configuring a new node
 
 A node starts in [unconfigured mode](security.md#unconfigured-mode) — this
@@ -208,12 +234,8 @@ its settings. It has five parts:
   trust the absence of.
 - **Node groups** — a name for a set of nodes, so a launch or a sync can say
   "everywhere" once. A member that is not a node here is marked in red.
-- **Configuration** — settings for the whole cluster, saved here and pushed to
-  every member. **Logging** sets the log level and any remote syslog hosts
-  (UDP or TCP). **Send test message** reports how each destination took a test
-  line. A table shows each node's level and whether its destinations are
-  working. A node that was off when the settings changed is marked **behind**,
-  with **Push to …** to send them again. See [Logging](logging.md).
+- Settings for the whole cluster (features, health checks, logging) are on
+  the [Settings](#settings) page.
 
 Each of the listings loads on its own, so a call that fails leaves the rest
 of the view working. That matters here more than anywhere: this is the tab a
@@ -285,10 +307,15 @@ A VM reports its own load average through its agent. If a container's cgroup
 cannot be found or read, waterpump falls back to the container's `/proc/loadavg`;
 when that is the host's, it shows "host-wide" and does not judge it.
 
-Tune any of it with `waterpump configure health` (interval of 15 seconds or more,
-each threshold including `load_average`, probe timeout, missed probes before unhealthy, start grace);
-`serve --no-health` turns checks off for one run. A saved file that does not
-validate is ignored with a warning. The same checks run on demand from the
+Tune any of it in **Settings → Health checks** or with `waterpump configure
+health` (interval of 15 seconds or more, each threshold including
+`load_average`, probe timeout, missed probes before unhealthy, start grace).
+It is a cluster setting: saved once, pushed to every member, so every node
+judges its instances alike, and a running `serve` picks a change up within
+seconds, with no restart. A node that has never had the shared setting keeps
+using its own `config/health.json` from before, if it has one.
+`serve --no-health` turns checks off for one run, whatever is saved. A
+saved setting that does not validate is ignored with a warning. The same checks run on demand from the
 CLI, which measures CPU and load over a short window since it has no previous
 check (its load is that window's average, shown as e.g. `4.00 (5s)`):
 
@@ -322,10 +349,13 @@ without running a check:
 
 **Home** is the first screen. Across the top, one tile each for nodes
 answering, containers running, instances whose health check says degraded or
-unhealthy, stacks running and templates in use; each opens the view behind it.
-Below them, every saved stack and template with what it is running across the
-whole cluster: how many instances, on which nodes, the least healthy of them,
-and any launch, recreate or destroy under way. In a cluster a node table
+unhealthy, tasks (or how many last failed) and templates in use, plus stacks
+running when that experimental feature is on; each opens the view behind it.
+Below them, every saved template with what it is running across the whole
+cluster: how many instances, on which nodes, the least healthy of them, and any
+launch, recreate or destroy under way. Beside it every task, with when it next
+runs and how its latest run went on whichever node ran it, running and failing
+ones first. With stacks on, a list of stacks follows. In a cluster a node table
 follows, with each member's state, daemon and running instances. Home asks
 every member, so it refreshes every ten seconds rather than every three, and
 a node that does not answer is named rather than silently left out.

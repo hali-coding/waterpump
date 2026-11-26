@@ -2,6 +2,14 @@
 
 [← back to README](../README.md)
 
+> **Experimental, and off by default.** Switch fabrics on in **Settings →
+> Features**, or with `waterpump features-set --enable fabrics`; the Network
+> tab then shows them and offers one in **New network**. A cluster that
+> already has a fabric keeps them on. While fabrics are off, `fabric check`,
+> `create` and `extend` are refused (`409`); nothing already made is touched,
+> and they cannot be switched off while any fabric exists.
+> [LAN networks](lan.md) are not part of this switch.
+
 This page is about networks between waterpump's own instances across nodes. To
 put instances on your LAN, addressed by your router, see
 [Containers on your LAN](lan.md).

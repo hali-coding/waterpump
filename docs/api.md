@@ -17,7 +17,7 @@ credentials get `401`, too little access `403`, too many failed logins `429`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/status` | daemon flavor/version, readiness, pools, networks |
+| `GET` | `/api/status` | daemon flavor/version, readiness, pools, networks, and `features` (`{stacks, fabrics}`: the experimental features in force) |
 | `POST` | `/api/setup` | create pool + bridge, attach to default profile |
 | `GET` | `/api/configure` | how this node is reached: `unconfigured`, bound `host`/`port`, `tls`, `auth`, `pinned` flags, saved `certificate`, `admins`, and `blocked` (why configuring is refused now, or `""`) |
 | `POST` | `/api/configure` | leave [unconfigured mode](security.md#unconfigured-mode): `{"username","password","tls":{"mode":"generate","host"}\|{"mode":"upload","cert","key"}\|{"mode":"keep"},"host":"0.0.0.0"}` → what was saved, then the server restarts; `409` in a cluster or while work is running |
@@ -26,6 +26,11 @@ credentials get `401`, too little access `403`, too many failed logins `429`.
 | `GET` | `/api/logs` | this node's [live tail](logging.md#watching-it-live): `?after=<cursor>&wait=0..25&limit=&level=&kind=&actor=&req=&channel=&instance=&q=` → `{node, boot, cursor, events, reset, truncated}`; without `after`, the latest events. Any logged-in user |
 | `GET` | `/api/cluster/logs` | every node's tail merged by time: same filters, `cursor` (opaque, from the last answer), `wait` (≤20), `nodes`/`group` → `{cursor, events (each with node), nodes: [{node, ok, error, pending, reset, truncated}]}`; returns as soon as any node has something |
 | `POST` | `/api/logging/test` | send a test line to every destination of this node now → per-destination `results` |
+| `GET` | `/api/features` | the experimental features: `settings` (`{stacks, fabrics}` in force), whether anyone has `saved` a choice, and `in_use` (what keeps each on) |
+| `PUT` | `/api/features` | `{"settings":{"stacks":bool,"fabrics":bool}}` → saved and pushed to every member; `409` turning one off while it is in use; returns `synced` |
+| `GET` | `/api/health/settings` | the health-check settings in force here: `settings`, `source` (`cluster`, `node` for a node's own file from before they were shared, or `default`), `warning`, `defaults` |
+| `PUT` | `/api/health/settings` | `{"settings":{"enabled","interval_seconds","cpu_percent","memory_percent","load_average","probe_timeout_seconds","failures_before_unhealthy","start_grace_seconds"}}` → saved and pushed to every member, in force without a restart; returns `synced` |
+| `DELETE` | `/api/health/settings` | forget the shared settings, here and on every member |
 | `PUT` | `/api/settings/{name}` | a cluster setting as stored — cluster members only (sync) |
 | `DELETE` | `/api/settings/{name}` | back to the default — cluster members only (sync) |
 | `GET` | `/api/containers` | list with live state |

@@ -16,8 +16,8 @@ journalctl -t waterpump | grep req=3cbcc6f8  # one request, end to end
 ```
 
 Optionally they also go to a remote syslog host. Both the level and the remote
-host are one setting for the whole cluster: set them in the **Cluster** tab
-under **Configuration → Logging**, or from the CLI:
+host are one setting for the whole cluster: set them in **Settings →
+Logging**, or from the CLI:
 
 ```bash
 waterpump logging                                 # the settings, and how each destination is doing here
@@ -157,7 +157,7 @@ per instance per round would drown everything else.
 - **Local:** sent to `/dev/log` in the form journald and rsyslog parse,
   `waterpump[PID]: <kind> key=value…`, so `journalctl -t waterpump` works. A host
   with no syslog socket logs to stderr instead, and says so in
-  `waterpump logging` and in the Cluster tab. `serve` started in a terminal also
+  `waterpump logging` and on the Settings page. `serve` started in a terminal also
   echoes lines there.
 - **Remote:** RFC 5424 (`<PRI>1 TIMESTAMP HOST waterpump PID KIND - key=value…`)
   over UDP, or over TCP with RFC 6587 octet-counted framing.

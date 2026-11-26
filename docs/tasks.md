@@ -22,7 +22,7 @@ A task is made of parts waterpump already has:
 - **Secrets**: kept sealed on every member and handed to the job.
 
 ```bash
-./waterpump task-save nightly-dump -t "Debian" -b pg-dump --group workers \
+./waterpump task-save nightly-dump -t "Debian" -b pg-dump --group all \
     --cron "0 2 * * *" --tz Europe/Stockholm \
     --secret DB_PASSWORD --param 'PGPASSWORD={{secrets.DB_PASSWORD}}'
 ./waterpump task-secret-set nightly-dump DB_PASSWORD  # from $DB_PASSWORD or a prompt
@@ -36,8 +36,10 @@ A task is placed on **node groups**, never on a node alone and never on
 "anywhere". A task tied to one node stops when that node does, which is the
 single owner tasks exist to avoid. A group, by contrast, can gain a member
 when the one it has is gone. `large` and `small` (the cluster's own sizing)
-are groups too. So is a group of one node, which is how to pin a task to one
-host if you really mean to.
+are groups too, and so is `all`: every member, kept by waterpump, which is
+what a new task runs on. On a single server `all` holds that server, so a
+task needs nothing set up first, and it widens by itself as nodes join. A
+group of one node is how to pin a task to one host if you really mean to.
 
 - Saving a task without a group is refused. A group that does not exist here
   is refused too. A group with no members is saved with a warning.

@@ -2,8 +2,14 @@
 
 [← back to README](../README.md)
 
-A stack is how waterpump describes a deployment, and the thing it is built to
-run. It launches several [templates](templates.md) in a fixed order: one
+> **Experimental, and off by default.** Switch stacks on in **Settings →
+> Features**, or with `waterpump features-set --enable stacks`; the Stacks tab
+> appears then. A cluster that already has stacks keeps them on. While stacks
+> are off, saving one is refused (`409`), and they cannot be switched off while
+> any stack exists. Stacks suit someone who already knows
+> [templates](templates.md) and [tasks](tasks.md).
+
+A stack describes a deployment. It launches several [templates](templates.md) in a fixed order: one
 database server, then three app servers pointed at it, then six load-test
 runners pointed at those. Later launches are handed the names and addresses of
 what earlier ones made, so nothing has to be copied by hand between steps, and
@@ -16,7 +22,7 @@ launching a template on its own is for a single tier with nothing to wire up.
 
 Stacks are meant to span **several nodes**: each launch step can name nodes or
 a node group, and a [fabric](networking.md) lets the tiers reach each other
-across hosts. That is the recommended deployment — see [Clusters](#clusters).
+across hosts — see [Clusters](#clusters).
 
 A stack is a list of **stages**. Stages run one after another, and the **steps**
 inside one stage run at the same time. A step is one of:

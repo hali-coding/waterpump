@@ -241,7 +241,15 @@ waterpump cluster groups
 waterpump cluster group delete edge -y
 ```
 
-Deleting a group is refused (`409`) while a stack's launch step targets it.
+Deleting a group is refused (`409`) while a task or a stack's launch step
+targets it.
+
+**`all`** is every member, kept by waterpump: it gains a node the moment one
+joins and loses it when it leaves, so it is never stored or synced and cannot
+be edited or deleted. It is what a new task runs on, and what to launch over
+for "one each, everywhere" (`waterpump launch web -n 4 --group all`). On a
+single server it holds that server, which is what lets a task run there with
+no group made first.
 
 A group is just a list of names. It can name a node that is not enrolled yet —
 listings mark those as unknown rather than dropping them — but launching at a
@@ -587,7 +595,8 @@ the template, exactly as a single-node run is.
 ## Shared definitions stay level by themselves
 
 Templates, modules, bootstrap profiles, node groups, [stacks](stacks.md),
-pinned images and cluster settings ([logging](logging.md)) are things the whole
+pinned images and cluster settings ([logging](logging.md), health checks and
+the experimental features) are things the whole
 cluster is meant to agree on, so **saving one pushes it to every member there
 and then** — no sync step to remember. The same goes for deleting one, since a
 copy left behind on one node is drift that a push-only sync can never clear.
@@ -685,8 +694,8 @@ waterpump cluster sync --kind users --kind groups --group edge
 ```
 
 `--kind` takes any of `templates`, `modules`, `profiles`, `groups`, `stacks`,
-`pins` (pinned images), `settings` (cluster settings such as
-[logging](logging.md)) and `users`, repeated; the UI has the same list behind
+`pins` (pinned images), `settings` (cluster settings: [logging](logging.md),
+`health` and `features`) and `users`, repeated; the UI has the same list behind
 **Sync** on the Cluster tab.
 
 Notes:
@@ -765,7 +774,7 @@ refuse it — with a message saying exactly that. Re-join it with a fresh code.
   tls/node-cert.pem        generated on first federating
   runtime.json             what `serve` is listening on, so the CLI can advertise it
   changes.json             when this node last saved or deleted each shared artifact
-  cluster-settings/<name>.json  settings every member shares: `logging` so far
+  cluster-settings/<name>.json  settings every member shares: `logging`, `health`, `features`
 ```
 
 `changes.json` is the change ledger reconciliation reads. Unlike everything else
