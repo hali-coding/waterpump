@@ -126,7 +126,9 @@ knowing nothing of the cluster), and the UI hides the Stacks tab, Home's
 stacks and the Network tab's fabrics from it (`navFor()` in App.tsx). LAN
 networks are not gated. A new experimental feature is a name in `NAMES`, a
 `require()` at its create paths, an `in_use()` branch and a `feature:` on its
-nav item.
+nav item. In the user docs, `docs/experimental.md` is the one place the rest
+of the docs point to: `stacks.md` and `fabrics.md` hold the detail, and every
+other page describes the everyday path without them, linking there at most.
 
 ### Event log
 

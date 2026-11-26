@@ -63,14 +63,10 @@ Each building block is made from the one before it:
 | **Task** | A job run in a throwaway instance, on a cron schedule, on demand or from a GitHub webhook. The cluster votes so that each occurrence runs at most once. | [tasks](docs/tasks.md) |
 | **Nodes** | Hosts joined with one code, each with its own daemon. Launches and tasks land on node groups; `all` is every member. | [nodes](docs/cluster.md) |
 
-Two more are **experimental and off by default**. Switch them on in
-**Settings → Features**, or with `waterpump features-set --enable stacks`.
-They suit someone who already knows the rest:
-
-| | What it is | Read more |
-| --- | --- | --- |
-| **Stack** | Templates launched in stages, each handed the names and addresses of the earlier ones, with health gates, scripts and load-test swarms. | [stacks](docs/stacks.md) |
-| **Fabric** | A routed network across every node, so instances reach each other whichever host they are on. | [networking](docs/networking.md) |
+Two more, **stacks** (templates launched in stages and run as one
+deployment) and **fabrics** (a routed network across every node), are
+experimental and off by default. They suit someone who already knows the
+rest; see [Experimental features](docs/experimental.md).
 
 ![The Cluster view: six nodes mixing LXD and Incus, with groups, maintenance and sync](docs/screenshots/cluster.jpg)
 
@@ -159,11 +155,10 @@ waterpump templates | modules | profiles
 waterpump task-save NAME -t TEMPLATE --script FILE --group all --cron "0 2 * * *"
 waterpump tasks | task-run NAME | task-runs NAME
 
-waterpump features | features-set --enable stacks   # experimental: stacks, fabrics
+waterpump features | features-set --enable stacks   # experimental features: see docs/experimental.md
 
 waterpump cluster invite | join CODE | status | containers | group auto
 waterpump cluster maintenance on     # keep new instances off this node
-waterpump fabric create              # experimental: a routed network across every node
 waterpump image-pin IMAGE            # one build, copied to every node, as pin:NAME
 
 waterpump top                        # live view of nodes and instances, with a console
@@ -188,16 +183,15 @@ waterpump cluster containers --json | jq -r '.instances[] | select(.template=="w
 | [Tasks](docs/tasks.md) | scheduled, invoked and webhook jobs; inputs; the vote on who runs each one |
 | [Bootstrap modules](docs/modules.md) | writing modules, parameters, secrets, profiles, the shipped modules |
 | [Nodes and federation](docs/cluster.md) | joining, groups, maintenance, sync and reconciliation, `waterpump top` |
-| [Stacks](docs/stacks.md) | *experimental:* stages, handing values along, health gates, secrets, scripts, swarms and reports |
-| [Networking between nodes](docs/networking.md) | *experimental:* fabrics, routed networks shared by every node |
 | [Containers on your LAN](docs/lan.md) | addresses from your router: a bridge, macvlan, or the host's NIC |
 | [Web UI tour](docs/web-ui.md) | Home, health, bulk actions, Storage, Network, Access and Settings |
-| [Security](docs/security.md) | logins (local, PAM, proxy), roles, API tokens, TLS |
+| [Security](docs/security.md) | logins (local, PAM, proxy), roles, API tokens, TLS, the host helper, kept secrets |
 | [Running as a service](docs/service.md) | systemd units, user vs system install |
 | [Logging](docs/logging.md) | who did what, the live tail, local and remote syslog |
 | [REST API](docs/api.md) | every endpoint, with request and response shapes |
 | [Daemons, images and storage](docs/daemons-and-storage.md) | LXD vs Incus, image remotes and pins, quotas, units |
 | [Development](docs/development.md) | source layout, the Vite dev server, how releases are cut |
+| [Experimental features](docs/experimental.md) | stacks and fabrics: switching them on, and where they touch the rest |
 
 ## Good to know
 
@@ -212,5 +206,5 @@ waterpump cluster containers --json | jq -r '.instances[] | select(.template=="w
 - **Members trust each other.** Nodes share one credential, so every node is an
   admin of every other. Only federate hosts you administer. See
   [Security](docs/security.md).
-- Launches and stack runs happen on the server. Closing the browser doesn't
+- Launches and task runs happen on the server. Closing the browser doesn't
   stop them; stopping `serve` does.

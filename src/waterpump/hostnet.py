@@ -93,7 +93,7 @@ def _binary(name):
     if not found:
         raise HostNetError(
             "%s is not installed, so waterpump cannot manage host routes. "
-            "Install iproute2 (see docs/networking.md)." % name, 503)
+            "Install iproute2 (see docs/security.md)." % name, 503)
     return found
 
 
@@ -594,7 +594,7 @@ def delegate(payload, timeout=120):
     if done.returncode != 0 and not (done.stdout or "").strip():
         raise HostNetError(
             "sudo refused to run the fabric helper: %s. Install the rules from "
-            "systemd/waterpump-fabric.sudoers (see docs/networking.md), or use "
+            "systemd/waterpump-fabric.sudoers (see docs/fabrics.md), or use "
             "`waterpump fabric plan` and apply it yourself."
             % ((done.stderr or "").strip()[-200:] or "no reason given"), 503)
     try:
@@ -661,7 +661,7 @@ def diagnose(bridges=()):
             warnings.append(
                 "sudo will not run the fabric helper without a password, so "
                 "routes cannot be programmed. Install the rules from "
-                "systemd/waterpump-fabric.sudoers (see docs/networking.md), or "
+                "systemd/waterpump-fabric.sudoers (see docs/fabrics.md), or "
                 "run `waterpump fabric plan` and apply it yourself.")
     if _sysctl_on("net/ipv4/ip_forward") is False:
         warnings.append("IPv4 forwarding is off on this host; `waterpump fabric apply` "
@@ -870,7 +870,7 @@ def lan_convert_plan(nic, bridge):
     if device is None:
         raise HostNetError("NetworkManager does not manage %s, so waterpump cannot "
                            "convert it. Make the bridge in your network "
-                           "configuration instead (see docs/networking.md)." % nic, 409)
+                           "configuration instead (see docs/lan.md)." % nic, 409)
     try:
         with open(_sys(nic, "address"), encoding="ascii") as handle:
             mac = handle.read().strip()

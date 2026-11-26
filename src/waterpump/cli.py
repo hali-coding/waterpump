@@ -3881,7 +3881,7 @@ def cmd_fabric_plan(args, service):
             lines.append("  %s" % command["command"].replace("\n", "\n  "))
         if not p["privileged"]:
             lines.append("")
-            lines.append(YELLOW("waterpump cannot run these itself; see docs/networking.md."))
+            lines.append(YELLOW("waterpump cannot run these itself; see docs/fabrics.md."))
         return "\n".join(lines)
 
     emit(args, plan, render)

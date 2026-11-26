@@ -136,7 +136,7 @@ nodeB, nodeC logs the `request` with `node=nodeB`. nodeB logs the same
 `req` as `channel=peer origin=nodeC`, keeping the person as `actor`, and logs
 the daemon `change` that followed. Grep every node's log for that one `req` to
 see the whole thing. Work that runs in the background, such as a template
-launch, a stack run or an image fetch, keeps the `req` and actor of whoever
+launch, a task run or an image fetch, keeps the `req` and actor of whoever
 started it.
 
 ## Levels

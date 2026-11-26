@@ -1,14 +1,10 @@
 # Fabrics: networking between nodes
 
-[← back to README](../README.md)
+[← Experimental features](experimental.md) · [README](../README.md)
 
 > **Experimental, and off by default.** Switch fabrics on in **Settings →
-> Features**, or with `waterpump features-set --enable fabrics`; the Network
-> tab then shows them and offers one in **New network**. A cluster that
-> already has a fabric keeps them on. While fabrics are off, `fabric check`,
-> `create` and `extend` are refused (`409`); nothing already made is touched,
-> and they cannot be switched off while any fabric exists.
-> [LAN networks](lan.md) are not part of this switch.
+> Experimental features**, or with `waterpump features-set --enable fabrics`.
+> See [Experimental features](experimental.md) for what the switch does.
 
 This page is about networks between waterpump's own instances across nodes. To
 put instances on your LAN, addressed by your router, see
@@ -53,7 +49,7 @@ on one and its web tier on another.
   arrives from the host's LAN address and is dropped.
 - **Once a macvlan network exists anywhere in the cluster,** every node also
   admits the LAN subnet it is on, so instances on that LAN reach every fabric
-  (see [Containers on your LAN](lan.md#reaching-the-fabrics)). That opens the
+  (see [LAN networks and fabrics](#lan-networks-and-fabrics)). That opens the
   fabrics to the whole of that LAN, which is the trade: a device there that
   adds a route can reach fabric instances too.
 - **Out of the fabric, NAT'd** (the default). Traffic for anywhere else leaves
@@ -250,9 +246,115 @@ refuses its subnet rather than re-addressing that network. This mostly shows
 up on a node that joined later. Rename or delete the network there, then run
 `waterpump fabric extend NAME`.
 
+## In the web UI
+
+The top of the **Network** tab is **Fabrics**. Each fabric has a card with its prefix,
+whether it NATs, and one row per node: the /24 that node holds, its gateway,
+how many of its routes to the other nodes are in place, which instances are
+attached, and a state (*ok*, *no bridge*, *routes*, *not on it*, *no answer*).
+Each row is the node's own report, fetched from it, so a missing bridge or
+route on another host shows up here rather than as lost packets. The card
+polls every 10 seconds, because every poll asks each member.
+
+The fabric step of **New network** is pre-filled with the first free name and /16,
+checked against every interface and route on every node. Editing either field
+checks again, shows the /24 each node would get, and names the node and
+interface that any overlap is with. The fabric is created on every node at
+once, so every node must be reachable: while one is not, the step says which
+node it is, that the way on without it is to evict it on the Cluster tab, and
+will not create.
+**Add missing nodes** gives a subnet to members that lack one, and **Delete**
+removes the fabric everywhere once no instance is attached to it. **Apply**
+and **Show plan** act on this node's routes and firewall.
+
+In the create and template dialogs, fabrics are a group of their own in the
+**Network** picker, so there is one choice to make. A fabric with NAT becomes
+the instance's only NIC: it reaches the fabric on every node directly and the
+internet through the NAT. A fabric without NAT cannot carry internet traffic,
+so it is added as a second NIC beside the default network. The hint under the
+picker says which of the two you get.
+
+## LAN networks and fabrics
+
+An instance on a [macvlan network](lan.md) reaches every fabric
+instance in the cluster, on any node, by its fabric address:
+
+- **Routes in the instance.** At launch waterpump gives it a static route to each
+  node's fabric subnet, via that node's LAN address -- and to its own host's
+  via the host's fabric gateway (below). They are kept where the guest's
+  network manager keeps them: a drop-in for the interface's own
+  systemd-networkd file (so networkd does not clear them as foreign), or an
+  ifupdown `if-up.d` hook elsewhere (Alpine, Debian without networkd). When
+  fabrics or members change, waterpump writes them again into every running
+  macvlan instance on that node, on the same clock as fabric routes.
+- **The fabrics let the LAN in.** Every member publishes which LAN subnets its
+  macvlan networks are on, and every fabric firewall admits them. That is the
+  whole subnet, not just waterpump's instances: any device on that LAN that adds
+  a route can reach fabric instances.
+- **The host shim.** macvlan never passes frames between a NIC and its own
+  macvlan instances, so on its own the host could not reach them, nor they its
+  fabric. waterpump adds a small macvlan interface to the host (`wpmp-<nic>`, no
+  address) that its instances *can* reach, plus a `/32` route per instance
+  through it (route protocol 134, apart from the fabric's 133), sending from the
+  host's own address on that LAN. What a fabric instance opens towards one is
+  SNAT'd to that address too (`ip waterpump_shim`). The shim is removed with the
+  last macvlan instance on that host. As a side effect the host now reaches
+  its own macvlan instances.
+
+An instance that has a fabric NIC as well already routes the whole prefix
+through it, and is left alone. The shim and the per-instance routes need the
+root helper; without it, an instance still reaches every *other* node's
+fabric.
+
+## Maintenance
+
+A node in [maintenance](cluster.md#maintenance) takes no fabric changes:
+creating, extending or deleting a fabric that would touch it waits until it is
+back, and on the node itself fabric claims, attaching and detaching are
+refused. Its own routes are left exactly as they were, and brought up to date
+when maintenance ends. `waterpump fabric apply` on the node still works: it
+only programs what the node already claims, which is how routes come back
+after a reboot during maintenance.
+
+A template launched on a node that is not on its fabric launches without that
+NIC, so those instances are reachable only on their own host. The run's notes
+and that node's log say so:
+
+```
+! nodeC: This node is not on the fabric pumpfab1; launched without its NIC, so these instances can only be reached from this host.
+```
+
+## Under systemd
+
+The helper raises privilege through `sudo`, which `NoNewPrivileges=yes` in the
+shipped units blocks. On the system unit, set `NoNewPrivileges=no`; on the
+user unit, use [the drop-in](service.md#a-user-unit-that-can-raise-privilege).
+Either way, you can instead program the routes yourself with `waterpump fabric
+apply`; the result is identical.
+
 ## Settings
 
 `waterpump configure fabric` sets the one thing that is per node: the address
 peers route this node's subnets to (by default the one its cluster URL names).
 The fabrics themselves are each a subnet the cluster allocated. They are kept
 in the same file, but only ever written by waterpump.
+
+## API
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /api/fabrics` | every fabric in the cluster, and each node's own report of its part (asks every member) |
+| `GET /api/fabrics/check?name=&prefix=` | would this fabric fit on every node? Blank fields are filled with the first free name and /16 |
+| `POST /api/fabrics` | create a fabric on every node: `{name, prefix, nat}`, any of them may be omitted |
+| `POST /api/fabrics/{name}/extend` | give every member that lacks one a subnet in it |
+| `DELETE /api/fabrics/{name}` | remove it from every node; refused while a template names it or any instance is attached |
+| `GET /api/fabric` | this node's half: its subnet, bridge and per-peer routes in each fabric |
+| `GET /api/fabric/host` | what this host already uses, which `check` asks each member for |
+| `GET /api/fabric/plan` | the host commands that would bring routes and firewall up to date |
+| `POST /api/fabric/apply` | create the bridges, program the routes and the firewall |
+| `POST /api/fabric/instances/{name}/attach` | give an instance a NIC on a fabric, `{fabric}` (`detach` removes it) |
+
+`PUT` and `DELETE /api/fabric/claims/{name}` exist too, but are members-only:
+they are how the node a fabric is created or deleted on tells each peer.
+Setting one node's subnet by hand is how two nodes end up holding the same
+range.

@@ -81,8 +81,7 @@ own shares the first's, so a secret is asked for once, by its plain name,
 unless a repeat is given `NAME@n` too.
 
 The same keys work wherever parameters do: `--param NAME@2=…` on `launch`,
-`template-recreate` and `bootstrap`, and in a stack step, whose designer lists
-each repeat's parameters separately.
+`template-recreate`, `bootstrap` and `task-save`.
 
 ## SSH keys
 
@@ -454,7 +453,7 @@ avahi-browse -rt _http._tcp         # the advertised services
   UDP), named after the host, in `/etc/avahi/services/waterpump.service`.
   Running the module again replaces the list; blank removes it.
 - **`MDNS_RESOLVE=yes`** also installs nss-mdns, so the instance resolves
-  other `.local` names (instances of a stack finding each other, say). On
+  other `.local` names (instances finding each other, say). On
   Alpine it cannot: musl has no Name Service Switch, so no package adds mDNS
   to its resolver (Alpine's `nss` is Mozilla's crypto library, unrelated).
   There the module installs `avahi-tools` instead, so a script can ask
@@ -464,9 +463,8 @@ avahi-browse -rt _http._tcp         # the advertised services
 mDNS is link-local multicast: a name reaches what shares the instance's
 network segment. That covers the host and every instance on the same bridge,
 and the LAN for an instance on a [LAN network](lan.md) (macvlan or a bridged
-NIC). It does **not** cross a fabric -- a fabric routes between nodes, and
-multicast is not routed -- so across nodes use the addresses
-`{{step.ip}}` hands on in a [stack](stacks.md). For the host to resolve
+NIC). It does **not** cross a routed hop, such as between the experimental
+[fabrics](fabrics.md)' nodes, since multicast is not routed. For the host to resolve
 `.local` names it needs nss-mdns itself (`libnss-mdns` on Debian and Ubuntu,
 installed on most desktops).
 

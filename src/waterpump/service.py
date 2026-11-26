@@ -3458,7 +3458,7 @@ class ContainerService:
     # than the daemon: a bridge over a spare NIC, macvlan on any wired one, or
     # the NIC the host uses turned into a bridge port. Which of those a NIC
     # allows depends on it, so the choice is offered per NIC -- see
-    # docs/networking.md and hostnet.py.
+    # docs/lan.md and hostnet.py.
 
     LAN_MODES = ("bridge", "macvlan", "convert")
 
@@ -3603,7 +3603,7 @@ class ContainerService:
         if not hostnet.available():
             raise ServiceError("waterpump cannot run its helper as root here, so it "
                                "cannot convert %s. Run the commands it shows yourself, "
-                               "or install the sudo rule (docs/networking.md)." % nic, 503)
+                               "or install the sudo rule (docs/security.md)." % nic, 503)
         answer = hostnet.delegate({"lan": {"action": "convert", "nic": nic,
                                            "bridge": bridge}}, timeout=300)
         if not answer.get("ok"):

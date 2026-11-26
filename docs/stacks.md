@@ -1,12 +1,11 @@
 # Stacks
 
-[← back to README](../README.md)
+[← Experimental features](experimental.md) · [README](../README.md)
 
 > **Experimental, and off by default.** Switch stacks on in **Settings →
-> Features**, or with `waterpump features-set --enable stacks`; the Stacks tab
-> appears then. A cluster that already has stacks keeps them on. While stacks
-> are off, saving one is refused (`409`), and they cannot be switched off while
-> any stack exists. Stacks suit someone who already knows
+> Experimental features**, or with `waterpump features-set --enable stacks`;
+> the Stacks tab appears then. See [Experimental features](experimental.md)
+> for what the switch does. Stacks suit someone who already knows
 > [templates](templates.md) and [tasks](tasks.md).
 
 A stack describes a deployment. It launches several [templates](templates.md) in a fixed order: one
@@ -20,9 +19,9 @@ and destroyed together, marked stale when its definition changes, and followed
 in the web UI, the CLI and `waterpump top`. Templates and modules are its parts;
 launching a template on its own is for a single tier with nothing to wire up.
 
-Stacks are meant to span **several nodes**: each launch step can name nodes or
-a node group, and a [fabric](networking.md) lets the tiers reach each other
-across hosts — see [Clusters](#clusters).
+A stack can span **several nodes**: each launch step can name nodes or a node
+group, and the experimental [fabrics](fabrics.md) let the tiers reach each
+other across hosts — see [Clusters](#clusters).
 
 A stack is a list of **stages**. Stages run one after another, and the **steps**
 inside one stage run at the same time. A step is one of:
@@ -587,7 +586,7 @@ whether to generate it:
   which secret, never the value.
 
 The value is never in the stack file, a listing, a run record or the event log.
-It is encrypted on each node under `auth/` (see [Security](security.md#stack-secrets))
+It is encrypted on each node under `auth/` (see [Security](#security))
 and travels between members only over the members-only sync route. Reveal is
 refused through another node (`/api/nodes/{node}/…`): the password can only
 be confirmed where you signed in, and the secret is on every node anyway.
@@ -622,18 +621,22 @@ environment variables of the same name, or prompts, as `launch` does.
 
 ## Clusters
 
-A stack on one host works, and is a fine way to develop one. A stack across
-several is what waterpump is for: losing a host costs its share rather than the
-deployment, tiers can be put where there is room (`waterpump cluster group auto`
-sorts nodes into `large` and `small`), and one join code is all a new host
+A stack on one host works, and is a fine way to develop one. Across several,
+losing a host costs its share rather than the deployment, tiers can be put
+where there is room (`waterpump cluster group auto` sorts nodes into `large`
+and `small`; `all` is every member), and one join code is all a new host
 needs. For tiers to reach each other across hosts, put their templates on a
-[fabric](networking.md) — a step's `{{db.ip}}` is then the fabric address,
+[fabric](fabrics.md) — a step's `{{db.ip}}` is then the fabric address,
 which means something on every node. See
-[the recommended deployment](../README.md#recommended-deployment-several-nodes).
+[Nodes and federation](cluster.md).
+
+A node in [maintenance](cluster.md#maintenance) takes no stack launches. A
+stack checks this before its first stage, so a relaunch is refused before
+anything is torn down.
 
 A launch step can name nodes or a node group, like the Launch dialog. In a
 cluster, a new launch step in the designer starts out on the first node group
-in alphabetical order (with `waterpump cluster group auto`, that is `large`),
+in alphabetical order (usually `all`),
 so a stack spreads over the cluster unless told otherwise. A single node, or a
 cluster with no groups, starts it on this node. Either way it is only where the
 step starts: the group is saved on the step and can be changed under
@@ -741,6 +744,77 @@ letters, digits and `_`, and must be unique in the stack; `params`, `vars` and
 object. `variables` may give a bare string as the value. A secret's entry
 holding a `value` is refused: values are set on their own route.
 
+## In waterpump top
+
+With stacks on, [`waterpump top`](cluster.md#watching-it-from-a-terminal) has a
+stacks panel before the templates panel while any stack has instances or a
+run in progress, stage by stage with the step that is running. **Tab** moves
+to it. It lists every stack this node holds, whether or not it has instances,
+so a first launch happens from here too:
+
+| Key | Action |
+| --- | --- |
+| `l` | relaunch (launch, when it has no instances) |
+| `u` / `s` / `r` | start / stop / restart every instance |
+| `d` | destroy |
+| `x` | cancel the run in progress |
+
+A relaunch asks for the stack's launch inputs (`{{params.NAME}}`) and any
+module secret no step sets, the same values `waterpump stack-launch` prompts
+for, masked and never kept. Recreating or destroying a template's instances
+that belong to a stack says so first. The actions go to this node's `serve`,
+so a launch, destroy or relaunch is an ordinary stack run there, and a cancel
+goes to whichever node holds the run.
+
+## Security
+
+### Script steps
+
+A stack's **Run a script** step runs a shell script on the node driving the
+stack, as the account waterpump runs as -- the only thing in waterpump that runs
+code on a host on purpose (modules run inside instances). Only an admin can
+write one, since a stack is saved by an admin; an operator can launch a stack,
+and so runs its scripts exactly as written. Stacks are synced, so a script an
+admin saves on one node can be launched from any member -- which is no more
+than federation already means (any member is an admin of every other).
+
+What keeps it contained is the account and the service unit, not waterpump: under
+the shipped systemd units the filesystem is read-only outside the data
+directory (`ProtectSystem=strict`, `ProtectHome=read-only`). The script is a
+file in a fresh directory, never an argument, and its output is kept masked of
+the stack's secrets and of every value entered at launch. Each run is logged
+with its stack, step, exit code and duration, never its text. A timeout or a
+cancel stops the script's whole process group.
+
+### Secrets
+
+A stack's secrets (see [Variables and secrets](#variables-and-secrets)) are
+kept like a task's -- sealed under the node's own key, exchanged between
+members over a members-only route -- and, unlike a task's, can be given back,
+because a person may need the password a stack generated. See
+[Kept secrets](security.md#kept-secrets) for the sealing; for stacks:
+
+- **Where.** `auth/stack-secrets.json`, sealed under `auth/secrets.key`; the
+  values cross between members over `PUT /api/stack-secrets/…`.
+- **Never in the open.** Not in the stack file, a listing, a run record, a
+  sync of `stacks`, the API explorer (shown as `<NAME>`), or the event log
+  (names only, and request bodies are logged through an allowlist that has
+  neither `value` nor `password`).
+- **Read back by an admin who confirms it.** Revealing one takes the `admin`
+  role *and* proof that a person is there: a password session must send its
+  password again, through the same backends and lockout as a login, because a
+  session cookie is ambient -- an unlocked browser carries it. An API token is
+  presented deliberately on every call and is enough on its own; a
+  trusted-proxy user has no password waterpump knows, and is sent to a token.
+  With auth off there is nobody to confirm, and the UI says so. A reveal
+  relayed through another node is refused, since there it would arrive under
+  the cluster credential. Every reveal is logged at warning level with who
+  and which secret.
+
+A secret handed to a module parameter its module does not declare secret is
+not redacted from that module's output; the designer and the save warn about
+it.
+
 ## API
 
 | Method | Path | Purpose |
@@ -791,5 +865,6 @@ the final record.
 
 One JSON file per stack in `~/.local/share/waterpump/stacks/`, named after a slug
 of its name, in the format above. Secret values are not in it: they are in
-`auth/stack-secrets.json`, encrypted under `auth/secrets.key`. Copy them between machines or check them into
+`auth/stack-secrets.json`, encrypted under `auth/secrets.key` (see
+[Security](#security)). Copy them between machines or check them into
 a project, as with templates.

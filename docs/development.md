@@ -9,10 +9,11 @@ waterpump        # CLI entry point, runs from the checkout
 src/waterpump/
   lxd.py           # LXD/Incus REST client over the unix socket
   service.py       # domain logic for this node, shared by the API and the CLI
-  stacks.py        # stacks: staged launches, values between steps, health gates
+  stacks.py        # stacks (experimental): staged launches, values between steps
   tasks.py, cron.py  # tasks: scheduled and invoked jobs, the vote on who runs each
   cluster.py       # federation: joining, groups, sync, reconciliation, cluster launches
-  fabric.py        # fabrics: routed networks across nodes
+  fabric.py        # fabrics (experimental) and LAN networks
+  features.py      # the experimental-feature switches
   hostnet.py       # the host's routes and firewall -- the one place that shells out
   health.py        # health judgement, load sampling, app checks
   metrics.py       # the Monitor page's usage history, sampled by serve

@@ -37,12 +37,11 @@ several names for the same reason and go through the same code.
   methods, with the `waterpump configure` section for each. Only this node can
   say, so these are not shared. **Configure node** changes them and restarts
   the server.
-- **Experimental features.** Stacks and fabrics are off on a new install, and
-  their tab and Network section are hidden until switched on here (or with
-  `waterpump features-set --enable stacks`). A node upgraded from before the
-  switch existed shows each one that is already in use as on. A feature cannot
-  be switched off while anything of it exists, and the page names what. One
-  setting for the whole cluster.
+- **Experimental features.** Switches for the experimental stacks and
+  fabrics, both off on a new install; a feature cannot be switched off while
+  anything of it exists, and the page names what. See
+  [Experimental features](experimental.md). One setting for the whole
+  cluster.
 
 A shared setting saved on one node is pushed to every member at once, and a
 node that was off catches up when it comes back, like a template.
@@ -107,8 +106,8 @@ without a stage.
 
 The web UI does nothing the [REST API](api.md) cannot, and the dialogs that
 create, change or delete something show how. The **API** button at the top
-right of such a dialog (new container, templates, stacks, modules, storage,
-networks, fabrics, users, node groups, invites, sync) opens a panel beside the
+right of such a dialog (new container, templates, tasks, modules, storage,
+networks, users, node groups, invites, sync, settings) opens a panel beside the
 form with the request its main button would send, as curl, JavaScript or
 Python, and it follows the form while you fill it in. It is built from the same
 code that sends the real request, so the two cannot differ.
@@ -151,7 +150,7 @@ shown at all.
 
 ## Shared definitions sync themselves
 
-Saving a template, a module, a bootstrap profile, a node group or a [stack](stacks.md) on a clustered
+Saving a template, a task, a module, a bootstrap profile or a node group on a clustered
 node pushes it to every other member as part of the save, and the toast says
 where it went — or names the node that missed it and points at Sync. Deleting
 one offers to remove it from the others too, ticked by default; untick it to
@@ -350,7 +349,7 @@ without running a check:
 **Home** is the first screen. Across the top, one tile each for nodes
 answering, containers running, instances whose health check says degraded or
 unhealthy, tasks (or how many last failed) and templates in use, plus stacks
-running when that experimental feature is on; each opens the view behind it.
+running when the [experimental](experimental.md) stacks are on; each opens the view behind it.
 Below them, every saved template with what it is running across the whole
 cluster: how many instances, on which nodes, the least healthy of them, and any
 launch, recreate or destroy under way. Beside it every task, with when it next
@@ -474,8 +473,8 @@ instances on it should reach, and carries on in the form for the answer, with
 
 - **Private to this node** -- each other and the internet, NAT'd behind the
   host, like `lxdbr0`. The usual choice; see [Managing networks](#managing-networks).
-- **Shared across the cluster (fabric)** -- each other on every node, by their
-  own addresses; see [Fabrics](#fabrics) below.
+- **Shared across the cluster (fabric)** -- only while the experimental
+  fabrics are switched on; see [Fabrics](fabrics.md#in-the-web-ui).
 - **On your LAN** -- addressed by your router and reachable like any machine on
   it: macvlan, a bridge over a spare NIC, or the host's own NIC turned into a
   bridge, offered per NIC as it allows; see [Containers on your LAN](lan.md).
@@ -486,8 +485,7 @@ instances on it should reach, and carries on in the form for the answer, with
 managed there too, as a LAN network made on every node is -- asks whether to
 delete it on this node only or on all of them, and lists the nodes. Each node
 still refuses while something there uses it, and a refusal on one does not stop
-the others. Fabrics are not offered this: they are deleted from the Fabrics
-section, which also removes their routes.
+the others.
 
 The **Network** tab explains how container networking is actually wired up,
 rather than just listing interfaces: the bridge's IPv4/IPv6 subnets, whether
@@ -500,35 +498,6 @@ address.
 Host interfaces the daemon does not manage (`docker0`, physical NICs) are
 listed separately so it is clear what is and is not under its control, with
 host bridges marked as ones a new instance can join.
-
-### Fabrics
-
-The top of the tab is **Fabrics**: routed networks that span every node (see
-[networking.md](networking.md)). Each fabric has a card with its prefix,
-whether it NATs, and one row per node: the /24 that node holds, its gateway,
-how many of its routes to the other nodes are in place, which instances are
-attached, and a state (*ok*, *no bridge*, *routes*, *not on it*, *no answer*).
-Each row is the node's own report, fetched from it, so a missing bridge or
-route on another host shows up here rather than as lost packets. The card
-polls every 10 seconds, because every poll asks each member.
-
-The fabric step of **New network** is pre-filled with the first free name and /16,
-checked against every interface and route on every node. Editing either field
-checks again, shows the /24 each node would get, and names the node and
-interface that any overlap is with. The fabric is created on every node at
-once, so every node must be reachable: while one is not, the step says which
-node it is, that the way on without it is to evict it on the Cluster tab, and
-will not create.
-**Add missing nodes** gives a subnet to members that lack one, and **Delete**
-removes the fabric everywhere once no instance is attached to it. **Apply**
-and **Show plan** act on this node's routes and firewall.
-
-In the create and template dialogs, fabrics are a group of their own in the
-**Network** picker, so there is one choice to make. A fabric with NAT becomes
-the instance's only NIC: it reaches the fabric on every node directly and the
-internet through the NAT. A fabric without NAT cannot carry internet traffic,
-so it is added as a second NIC beside the default network. The hint under the
-picker says which of the two you get.
 
 ### Managing networks
 

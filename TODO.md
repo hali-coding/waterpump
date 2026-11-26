@@ -73,7 +73,7 @@ fixed was verified live on the cluster afterwards.
   failed launches.
 - **firewalld hosts:** waterpump neither documents nor handles firewalld. On
   Fedora, its bridges fall into the default zone and containers get no DHCP or
-  DNS. `docs/networking.md` should say which zone settings a bridge needs.
+  DNS. `docs/fabrics.md` should say which zone settings a bridge needs.
   The fabric helper could put its own bridges (and say which other bridge to
   add) in a zone, the way it already keeps `DOCKER-USER` rules for Docker
   hosts. `status` could warn when firewalld is active and a waterpump bridge has
