@@ -6,7 +6,7 @@
 # Pins the newest build of DEBIAN_IMAGE (default images:debian/13, the
 # current stable; debian/14 on the remotes is testing) as
 # pin:golden-task-image, saves a template `golden-task` that launches it,
-# and a task `test-task` on every node group that runs `echo "dog"` every five
+# and a task `test-task` on group `all` (every member) that runs `echo "dog"` every five
 # minutes. Rerunnable: a pin that already answers to the nickname is kept,
 # and the template and task are saved over.
 #
@@ -47,13 +47,9 @@ wp "$set" "$first_ip" template-save "$template" --image "pin:$nickname" \
     --description "ci/task-setup.sh: plain $image for tasks" </dev/null
 endgroup
 
-# A task must name groups, never "anywhere": every group the cluster has --
-# large and small from cluster.sh's sizing -- is as close as it gets.
+# A task must name groups, never "anywhere": `all` is every member, kept by
+# waterpump, so the task follows the cluster as nodes join and leave.
 group "task $task"
-groups=$(wp "$set" "$first_ip" cluster groups --json </dev/null |
-    json "' '.join('--group ' + g['name'] for g in d)")
-[ -n "$groups" ] || die "the cluster has no node groups (ci/cluster.sh sizes them)"
-# shellcheck disable=SC2086
 printf 'echo "dog"\n' | wp "$set" "$first_ip" task-save "$task" -t "$template" \
-    --script - --cron '*/5 * * * *' $groups --enable
+    --script - --cron '*/5 * * * *' --group all --enable
 endgroup
