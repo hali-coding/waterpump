@@ -72,7 +72,7 @@ import threading
 import time
 from urllib.parse import quote
 
-from . import auth as auth_module, eventlog, stackreport, store
+from . import auth as auth_module, eventlog, features, stackreport, store
 from .bootstrap import (BootstrapError, discover_modules, occurrence_value, occurrences,
                         param_key, redact, secret_param_names, split_param)
 from .cluster import ClusterError, from_peer
@@ -209,6 +209,11 @@ class StackService:
         the caller -- and the delete drops the old name's secret values. So
         they are moved here first, while the old name still holds them.
         """
+        if propagate:
+            # A person's save only: a member's push or reconciliation carries a
+            # stack someone saved where the flag was checked, and a stack that
+            # exists turns the flag on (features.effective()), never off.
+            features.require("stacks")
         name = self.service._record_name(name, "stack")
         variables = _check_variables(variables)
         declared = _check_secret_declarations(secrets)
@@ -241,7 +246,7 @@ class StackService:
         after the stack -- so a save cannot require them. A typo would
         otherwise be heard about only when a launch fails, so the save says so.
         """
-        groups = set(store.load_node_groups())
+        groups = set(self.cluster.node_groups())
         nodes = set(self.cluster.all_nodes())
         warnings = []
         for stage in stages:

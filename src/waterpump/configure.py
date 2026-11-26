@@ -18,7 +18,7 @@ import os
 import secrets
 import sys
 
-from . import auth, cluster, eventlog, nodesetup, pam, store
+from . import auth, cluster, eventlog, features, nodesetup, pam, store
 from . import fabric as fabric_net
 from . import health as health_checks
 
@@ -513,12 +513,122 @@ class AuthSection(Section):
         return rows
 
 
-@register
-class HealthSection(Section):
-    name = "health"
-    help = "how often `serve` checks running instances, and what counts as degraded"
+def _cluster_service():
+    """A ClusterService for saving a shared setting, as the Settings page does."""
+    # Imported here: service.py is heavy, and only the shared sections need it.
+    from .lxd import LXDError
+    from .service import ContainerService
+    try:
+        service = ContainerService()
+    except LXDError as exc:
+        raise ConfigureError("Cannot reach the daemon to share the setting: %s" % exc)
+    return cluster.ClusterService(service, auth.AuthService(
+        auth.build_config(auth.load_settings())))
+
+
+class SharedSection(Section):
+    """A cluster setting (cluster.py's CLUSTER_SETTINGS): one record, not a config/ file.
+
+    Saved through ClusterService like the Settings page saves it, so a change
+    made here reaches every member too.
+    """
+    setting = ""
+
+    def path(self):
+        return store.settings_record_path(self.setting) or os.path.join(
+            store.settings_records_dir(), "%s.json" % self.setting)
+
+    def configured(self):
+        return self.setting in store.load_settings_records()
+
+    def clean(self, value):
+        raise NotImplementedError
 
     def load(self):
+        record = store.load_settings_records().get(self.setting)
+        if record is None:
+            return None
+        try:
+            return self.clean(record["value"])
+        except cluster._SETTING_ERRORS as exc:
+            raise ConfigureError(exc.message)
+
+    def save(self, settings):
+        try:
+            return _cluster_service().save_setting(self.setting, settings)["value"]
+        except cluster.ClusterError as exc:
+            raise ConfigureError("Not saved: %s" % exc.message)
+
+    def reset(self):
+        # The record itself, not configured(): a subclass may count another
+        # file as configured, and pushing the delete of a record this node
+        # never had would clear it on every member.
+        if self.setting not in store.load_settings_records():
+            return False
+        _cluster_service().delete_setting(self.setting)
+        return True
+
+    def after_save(self, p, s):
+        p.say()
+        p.say("Saved for the whole cluster: every member that could be reached has it "
+              "now, and a running `serve` uses it straight away.")
+
+
+@register
+class FeaturesSection(SharedSection):
+    """Experimental features, for the whole cluster: features.py."""
+    name = "features"
+    setting = features.SETTING_NAME
+    help = "switch the experimental stacks and fabrics on or off, for every member"
+
+    def clean(self, value):
+        return features.clean_settings(value)
+
+    def load(self):
+        # What is in force, chosen or not: a feature in use reads as on.
+        return features.effective() if self.configured() else None
+
+    def defaults(self):
+        return features.effective()
+
+    def prompt(self, p, current):
+        s = dict(self.defaults())
+        s.update(current or {})
+        p.say("waterpump's everyday work is instances and tasks. These two are for an "
+              "experienced user, and are off on a new install:")
+        p.say()
+        p.say("  stacks   templates launched in stages, wired together and operated as one")
+        p.say("  fabrics  a routed network spanning every node of a cluster")
+        p.say()
+        for name in features.NAMES:
+            used = features.in_use(name)
+            if used:
+                p.say("%s are in use (%s), so they stay on." % (
+                    features.LABELS[name], ", ".join(used)))
+                s[name] = True
+                continue
+            s[name] = p.yes_no("Enable %s?" % name, s[name])
+        return s
+
+    def describe(self, s):
+        return [(name, "on" if s[name] else "off") for name in features.NAMES]
+
+
+@register
+class HealthSection(SharedSection):
+    name = "health"
+    setting = health_checks.SETTING_NAME
+    help = "how often `serve` checks running instances, and what counts as degraded -- for every member"
+
+    def clean(self, value):
+        return health_checks.clean_settings(value)
+
+    def load(self):
+        shared = super().load()
+        if shared is not None:
+            return shared
+        # A node that has never had the shared record keeps judging by its
+        # own file, which is what saving here replaces for the whole cluster.
         try:
             raw = store.load_config(self.name)
             return None if raw is None else health_checks.clean_settings(raw)
@@ -527,15 +637,6 @@ class HealthSection(Section):
 
     def defaults(self):
         return dict(health_checks.DEFAULT_SETTINGS)
-
-    def save(self, settings):
-        try:
-            return health_checks.save_settings(settings)
-        except health_checks.HealthSettingsError as exc:
-            raise ConfigureError("Not saved: %s" % exc.message)
-
-    def reset(self):
-        return health_checks.reset_settings()
 
     def prompt(self, p, current):
         s = self.defaults()
@@ -590,10 +691,14 @@ class HealthSection(Section):
             ("start grace", "%ss" % _number(s["start_grace_seconds"])),
         ]
 
-    def after_save(self, p, s):
-        p.say()
-        p.say("This applies the next time `waterpump serve` starts; `waterpump health` uses it "
-              "straight away.")
+    def configured(self):
+        return super().configured() or os.path.exists(store.config_path(self.name))
+
+    def reset(self):
+        # Both: the shared record, and the node file a reset would otherwise
+        # leave in force on this node alone.
+        shared = super().reset()
+        return health_checks.reset_settings() or shared
 
 
 _LEVEL_CHOICES = [
@@ -606,57 +711,17 @@ _LEVEL_CHOICES = [
 
 
 @register
-class LoggingSection(Section):
-    """The cluster's logging settings: one shared record, not a config/ file.
-
-    Saved through ClusterService like the Cluster tab saves it, so a change
-    made here reaches every member too.
-    """
+class LoggingSection(SharedSection):
+    """The cluster's logging settings: one shared record, not a config/ file."""
     name = "logging"
+    setting = eventlog.SETTING_NAME
     help = "log level, and a remote syslog host -- for every member of the cluster"
 
-    def path(self):
-        return store.settings_record_path(eventlog.SETTING_NAME) or os.path.join(
-            store.settings_records_dir(), "%s.json" % eventlog.SETTING_NAME)
-
-    def configured(self):
-        return eventlog.SETTING_NAME in store.load_settings_records()
-
-    def load(self):
-        record = store.load_settings_records().get(eventlog.SETTING_NAME)
-        if record is None:
-            return None
-        try:
-            return eventlog.clean_settings(record["value"])
-        except eventlog.LoggingSettingsError as exc:
-            raise ConfigureError(exc.message)
+    def clean(self, value):
+        return eventlog.clean_settings(value)
 
     def defaults(self):
         return eventlog.clean_settings(eventlog.DEFAULT_SETTINGS)
-
-    @staticmethod
-    def _cluster():
-        # Imported here: service.py is heavy, and only this section needs it.
-        from .lxd import LXDError
-        from .service import ContainerService
-        try:
-            service = ContainerService()
-        except LXDError as exc:
-            raise ConfigureError("Cannot reach the daemon to share the setting: %s" % exc)
-        return cluster.ClusterService(service, auth.AuthService(
-            auth.build_config(auth.load_settings())))
-
-    def save(self, settings):
-        try:
-            return self._cluster().save_setting(eventlog.SETTING_NAME, settings)["value"]
-        except cluster.ClusterError as exc:
-            raise ConfigureError("Not saved: %s" % exc.message)
-
-    def reset(self):
-        if not self.configured():
-            return False
-        self._cluster().delete_setting(eventlog.SETTING_NAME)
-        return True
 
     def prompt(self, p, current):
         s = self.defaults()
@@ -700,11 +765,6 @@ class LoggingSection(Section):
         if not s["destinations"]:
             rows.append(("remote", "none"))
         return rows
-
-    def after_save(self, p, s):
-        p.say()
-        p.say("Saved for the whole cluster: every member that could be reached has it "
-              "now, and a running `serve` uses it straight away.")
 
 
 @register
@@ -939,7 +999,7 @@ class ListenSection(Section):
 @register
 class FabricSection(Section):
     name = "fabric"
-    help = "routed, non-NAT networking between the containers of a cluster"
+    help = "(experimental) routed, non-NAT networking between the containers of a cluster"
 
     def load(self):
         try:

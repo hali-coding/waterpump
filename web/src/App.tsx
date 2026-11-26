@@ -3,7 +3,8 @@ import type { ReactNode } from 'react'
 import { ApiError, api, hasToken, setToken } from './lib/api'
 import type {
   AuthInfo, CreateProgress, CreateRequest, HealthRecord, HealthStatus, InstanceRef,
-  ImageJob, NodeSetupState, ScopedContainer, StackRun, StateAction, Status, TemplateRun,
+  FeatureName, Features, ImageJob, NodeSetupState, ScopedContainer, StackRun, StateAction, Status,
+  TemplateRun,
 } from './lib/types'
 import { keyOf } from './lib/instance'
 import { AuthContext } from './hooks/useAuth'
@@ -21,6 +22,7 @@ import { CreateDialog } from './components/CreateDialog'
 import {
   BoxIcon, DatabaseIcon, HelpIcon, HomeIcon, LayersIcon, MenuIcon, MoonIcon, NetworkIcon, PlusIcon, PuzzleIcon,
   ClockIcon, LogsIcon, PulseIcon, RefreshIcon, ServerIcon, ShieldIcon, StackIcon, SunIcon, TemplateIcon,
+  WrenchIcon,
 } from './components/Icons'
 import { ImagesView } from './components/ImagesView'
 import { ModulesView } from './components/ModulesView'
@@ -33,6 +35,7 @@ import { ScopePicker } from './components/ScopePicker'
 import { SetupBanner } from './components/SetupBanner'
 import { StacksView } from './components/StacksView'
 import { TasksView } from './components/TasksView'
+import { SettingsView } from './components/SettingsView'
 import { StorageView } from './components/StorageView'
 import { LoginGate } from './components/LoginGate'
 import { TemplatesView } from './components/TemplatesView'
@@ -42,7 +45,16 @@ import { Toasts } from './components/Toasts'
 const POLL_INTERVAL = 3000
 
 type View = 'home' | 'containers' | 'templates' | 'stacks' | 'tasks' | 'images' | 'cluster' | 'storage'
-  | 'network' | 'modules' | 'access' | 'logs' | 'monitor'
+  | 'network' | 'modules' | 'access' | 'logs' | 'monitor' | 'settings'
+
+interface NavItem {
+  id: View
+  label: string
+  icon: ReactNode
+  about: string
+  /** Shown only while this experimental feature is on (Settings → Features). */
+  feature?: FeatureName
+}
 
 // Grouped by what a person comes to do: run things, or look after the hosts
 // they run on and who may reach them.
@@ -56,62 +68,73 @@ const NAV: {
     /** Whether each part builds on the one before, so the overview draws arrows. */
     chain: boolean
   }
-  items: { id: View; label: string; icon: ReactNode; about: string }[]
+  items: NavItem[]
 }[] = [
   { label: 'Workloads',
     help: {
-      intro: 'Everything here ends in containers, and each part builds on the one before it.',
-      order: ['images', 'modules', 'templates', 'stacks', 'tasks', 'containers'],
+      intro: 'Everything here ends in instances, and each part builds on the one before it.',
+      order: ['images', 'modules', 'templates', 'containers', 'tasks', 'stacks'],
       chain: true,
     },
     items: [
       { id: 'containers', label: 'Containers', icon: <BoxIcon size={16} />,
         about: 'The running instances, whichever node they are on. Create one by hand, or '
-          + 'let a template or stack make them.' },
+          + 'launch as many as you need from a template.' },
+      { id: 'tasks', label: 'Tasks', icon: <ClockIcon size={16} />,
+        about: 'A job run in a throwaway instance on a schedule, on demand or from a '
+          + 'webhook. The cluster decides which node runs each one, at most once; the '
+          + 'instance is destroyed when the run ends.' },
       { id: 'templates', label: 'Templates', icon: <TemplateIcon size={16} />,
         about: 'A saved recipe — image, size, storage, network and modules — that launches '
-          + 'one or many containers, and can recreate or destroy them together.' },
-      { id: 'stacks', label: 'Stacks', icon: <StackIcon size={16} />,
-        about: 'Templates run in stages, so a database is up before the app that needs it. '
-          + 'Each step can hand its addresses and values to the next.' },
-      { id: 'tasks', label: 'Tasks', icon: <ClockIcon size={16} />,
-        about: 'Modules run in a throwaway container on a schedule or when invoked with '
-          + 'inputs. The cluster decides which node runs each one; the container is '
-          + 'destroyed when the run ends.' },
+          + 'one or many instances, and can recreate or destroy them together.' },
       { id: 'images', label: 'Images', icon: <LayersIcon size={16} />,
-        about: 'What containers are made from: images on each node, and snapshots that can '
-          + 'become one. Copy an image to other nodes so templates launch it there.' },
+        about: 'What instances are made from: images on each node, and snapshots that can '
+          + 'become one. Pin a build so every node launches exactly the same one.' },
       { id: 'modules', label: 'Modules', icon: <PuzzleIcon size={16} />,
-        about: 'Shell scripts that set up a container once it starts: install packages, add '
-          + 'SSH keys, start services. Templates pick which ones run.' },
+        about: 'Shell scripts that set up an instance once it starts: install packages, add '
+          + 'SSH keys, start services. Templates and tasks pick which ones run.' },
+      { id: 'stacks', label: 'Stacks', icon: <StackIcon size={16} />, feature: 'stacks',
+        about: 'Experimental. Templates run in stages, so a database is up before the app '
+          + 'that needs it. Each step can hand its addresses and values to the next.' },
     ] },
   { label: 'Infrastructure',
     help: {
-      intro: 'Where containers run, what they run on, and who may reach them.',
-      order: ['cluster', 'monitor', 'storage', 'network', 'access', 'logs'],
+      intro: 'Where instances run, what they run on, and who may reach them.',
+      order: ['cluster', 'monitor', 'storage', 'network', 'access', 'logs', 'settings'],
       chain: false,
     },
     items: [
       { id: 'cluster', label: 'Cluster', icon: <ServerIcon size={16} />,
-        about: 'The hosts running waterpump, each with its own LXD or Incus. Joined into a '
-          + 'cluster they share templates, stacks and modules, and launches can spread '
-          + 'across them. Settings for the whole cluster, such as logging, are here too.' },
+        about: 'The hosts running waterpump, each with its own LXD or Incus on its own OS. '
+          + 'Joined into a cluster they share templates, tasks and modules, and launches '
+          + 'can spread across them.' },
       { id: 'monitor', label: 'Monitor', icon: <PulseIcon size={16} />,
         about: 'CPU, memory and network over the last half hour on every node and in every '
-          + 'container, live: the page to keep open during a load test.' },
+          + 'instance, live.' },
       { id: 'storage', label: 'Storage', icon: <DatabaseIcon size={16} />,
-        about: 'Pools that hold containers’ disks, and extra volumes to attach to them.' },
+        about: 'Pools that hold instances’ disks, and extra volumes to attach to them.' },
       { id: 'network', label: 'Network', icon: <NetworkIcon size={16} />,
-        about: 'Bridges that connect containers on one host. A fabric links them across '
-          + 'nodes, so containers on different hosts reach each other directly.' },
+        about: 'Bridges that connect instances on one host, and networks that put them '
+          + 'straight on your LAN.' },
       { id: 'access', label: 'Access', icon: <ShieldIcon size={16} />,
         about: 'Users and API tokens, and whether each may only look, operate what exists, '
           + 'or change everything.' },
       { id: 'logs', label: 'Logs', icon: <LogsIcon size={16} />,
         about: 'Everything waterpump does and who asked for it, live from every node: '
           + 'follow one request across the cluster, or one instance’s history.' },
+      { id: 'settings', label: 'Settings', icon: <WrenchIcon size={16} />,
+        about: 'Health checks, logging and experimental features for the whole cluster, '
+          + 'and how this node is reached.' },
     ] },
 ]
+
+/** The menu as it stands: items for a feature that is off are left out. */
+function navFor(features: Features | undefined) {
+  return NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.feature || features?.[item.feature]),
+  }))
+}
 
 const STATE_VERB: Record<StateAction, string> = {
   start: 'Started', stop: 'Stopped', restart: 'Restarted',
@@ -645,6 +668,12 @@ export default function App() {
   }, [notify, refresh])
 
   const ready = status?.ready ?? false
+  const features = status?.features
+  const nav = navFor(features)
+  // A view whose feature was switched off (here or on another member) has no
+  // menu entry left to leave it by, so Home shows instead.
+  const hidden = NAV.flatMap((g) => g.items).find((item) => item.id === view)?.feature
+  const shown: View = hidden && features && !features[hidden] ? 'home' : view
   const principal = authInfo?.enabled ? authInfo.principal : null
   const canWrite = !principal || principal.role === 'admin'
   const running = containers?.filter((c) => c.status === 'Running').length ?? 0
@@ -652,14 +681,14 @@ export default function App() {
   // Conditions worth knowing about wherever you are, in the corner on every
   // tab. One that Home already shows as a banner is left off there.
   const notices: Notice[] = []
-  if (localMaintenance && view !== 'home') {
+  if (localMaintenance && shown !== 'home') {
     notices.push({
       key: `maintenance:${localMaintenance.since}`,
       kind: 'warn',
       title: `${localNode || 'This node'} is in maintenance`,
       detail: 'No new instances or fabric changes here'
         + (localMaintenance.reason ? ` — ${localMaintenance.reason}` : '') + '.',
-      action: view === 'cluster' ? undefined : { label: 'Cluster tab', onClick: () => setView('cluster') },
+      action: shown === 'cluster' ? undefined : { label: 'Cluster tab', onClick: () => setView('cluster') },
     })
   }
   const { visible: shownNotices, close: closeNotices } = useNotices(notices)
@@ -674,14 +703,14 @@ export default function App() {
         </div>
         <nav className="sidebar-nav" aria-label="Views">
           <button className="sidebar-item"
-            aria-current={view === 'home' ? 'page' : undefined}
+            aria-current={shown === 'home' ? 'page' : undefined}
             onClick={() => {
               setView('home')
               setNavOpen(false)
             }}>
             <HomeIcon size={16} /><span>Home</span>
           </button>
-          {NAV.map((group) => (
+          {nav.map((group) => (
             <div key={group.label} className="sidebar-group">
               <div className="sidebar-label">
                 {group.label}
@@ -697,7 +726,7 @@ export default function App() {
                 <button
                   key={item.id}
                   className="sidebar-item"
-                  aria-current={view === item.id ? 'page' : undefined}
+                  aria-current={shown === item.id ? 'page' : undefined}
                   onClick={() => {
                     setView(item.id)
                     setNavOpen(false)
@@ -705,6 +734,11 @@ export default function App() {
                 >
                   {item.icon}
                   <span>{item.label}</span>
+                  {item.feature && (
+                    <span className="sidebar-count" title="Experimental: switched on in Settings">
+                      beta
+                    </span>
+                  )}
                   {item.id === 'containers' && containers && containers.length > 0 && (
                     <span className="sidebar-count"
                       title={`${running} of ${containers.length} running`}>
@@ -732,9 +766,9 @@ export default function App() {
           <MenuIcon />
         </button>
         <div className="topbar-title">
-          {view === 'home' && <strong>Home</strong>}
-          {NAV.flatMap((g) => g.items.map((item) => ({ ...item, group: g.label })))
-            .filter((item) => item.id === view)
+          {shown === 'home' && <strong>Home</strong>}
+          {nav.flatMap((g) => g.items.map((item) => ({ ...item, group: g.label })))
+            .filter((item) => item.id === shown)
             .map((item) => (
               <span key={item.id}>
                 <span className="faint">{item.group}</span>
@@ -769,7 +803,7 @@ export default function App() {
               )}
             </span>
           )}
-          {view === 'containers' && (
+          {shown === 'containers' && (
             <button className="btn btn-primary" onClick={() => setShowCreate(true)}
               disabled={!ready || !canWrite || !!localMaintenance}
               title={localMaintenance ? 'This node is in maintenance' : undefined}>
@@ -791,7 +825,7 @@ export default function App() {
           </div>
         )}
 
-        {localMaintenance && view === 'home' && (
+        {localMaintenance && shown === 'home' && (
           <div className="banner banner-warn">
             <div className="banner-body">
               <h3>{localNode || 'This node'} is in maintenance</h3>
@@ -811,8 +845,8 @@ export default function App() {
                 <>
                   <h3>Operator access</h3>
                   <p style={{ margin: 0 }}>
-                    {principal.name} can start, stop, destroy and launch instances, templates
-                    and stacks and run commands in them, but cannot change any settings.
+                    {principal.name} can start, stop, destroy and launch instances and
+                    templates, run tasks and run commands in them, but cannot change any settings.
                   </p>
                 </>
               ) : (
@@ -850,18 +884,21 @@ export default function App() {
           <SetupBanner status={status} onSetup={runSetup} />
         )}
 
-        {view === 'access' ? (
+        {shown === 'access' ? (
           <AccessView onNotify={notify} />
-        ) : view === 'monitor' ? (
+        ) : shown === 'settings' ? (
+          <SettingsView nodes={nodes} setup={nodeSetup} onConfigure={openConfigure}
+            onNotify={notify} onChanged={() => refresh()} />
+        ) : shown === 'monitor' ? (
           <MonitorView nodes={nodes} groups={groups} federated={federated} />
-        ) : view === 'logs' ? (
+        ) : shown === 'logs' ? (
           <LogsView nodes={nodes} groups={groups} federated={federated} />
-        ) : view === 'cluster' ? (
+        ) : shown === 'cluster' ? (
           <ClusterView onNotify={notify} onMembershipChanged={reloadCluster}
             setup={nodeSetup} onConfigure={openConfigure} />
-        ) : view === 'modules' ? (
+        ) : shown === 'modules' ? (
           <ModulesView onNotify={notify} />
-        ) : view === 'templates' ? (
+        ) : shown === 'templates' ? (
           <TemplatesView
             containers={containers}
             localNode={localNode}
@@ -883,7 +920,7 @@ export default function App() {
               refresh()
             }}
           />
-        ) : view === 'images' ? (
+        ) : shown === 'images' ? (
           <>
             <div className="section-head">
               <h2>Images</h2>
@@ -894,7 +931,7 @@ export default function App() {
             <ImagesView localNode={localNode} jobs={shownJobs} onDismissJob={dismissJob}
               onJobStarted={followImageJob} onNotify={notify} />
           </>
-        ) : view === 'stacks' ? (
+        ) : shown === 'stacks' ? (
           <StacksView
             localNode={localNode}
             ready={ready}
@@ -904,9 +941,9 @@ export default function App() {
             onOpen={openInstance}
             onChanged={() => refresh()}
           />
-        ) : view === 'tasks' ? (
+        ) : shown === 'tasks' ? (
           <TasksView localNode={localNode} onNotify={notify} />
-        ) : view === 'storage' ? (
+        ) : shown === 'storage' ? (
           <>
             <div className="section-head">
               <h2>Storage</h2>
@@ -916,7 +953,7 @@ export default function App() {
             </div>
             <StorageView onNotify={notify} />
           </>
-        ) : view === 'home' ? (
+        ) : shown === 'home' ? (
           <>
             <div className="section-head">
               <h2>Home</h2>
@@ -924,9 +961,10 @@ export default function App() {
                 what the cluster is running, and how this node is doing
               </span>
             </div>
-            <HomeView templateRuns={templateRuns} stackRuns={stackRuns} onNavigate={setView} />
+            <HomeView templateRuns={templateRuns} stackRuns={stackRuns} features={features}
+              onNavigate={setView} />
           </>
-        ) : view === 'network' ? (
+        ) : shown === 'network' ? (
           <>
             <div className="section-head">
               <h2>Network</h2>
@@ -934,7 +972,8 @@ export default function App() {
                 how {status?.product ?? 'the daemon'} wires up container networking
               </span>
             </div>
-            <NetworkView onNotify={notify} />
+            <NetworkView onNotify={notify} fabrics={features?.fabrics ?? false}
+              federated={federated} onOpenSettings={() => setView('settings')} />
           </>
         ) : (
         <>
@@ -1084,13 +1123,13 @@ export default function App() {
         />
       )}
 
-      {NAV.filter((group) => group.label === helpFor).map((group) => (
+      {nav.filter((group) => group.label === helpFor).map((group) => (
         <Modal key={group.label} title={`How ${group.label.toLowerCase()} fit together`}
           subtitle={group.help.intro} onClose={() => setHelpFor(null)}
           footer={<button className="btn btn-primary" onClick={() => setHelpFor(null)}>Got it</button>}>
           <ol className={`nav-help${group.help.chain ? ' nav-help-chain' : ''}`}>
-            {group.help.order.map((id) => group.items.find((item) => item.id === id)!)
-              .map((item) => (
+            {group.help.order.map((id) => group.items.find((item) => item.id === id))
+              .filter((item): item is NavItem => item !== undefined).map((item) => (
                 <li key={item.id}>
                   <span className="nav-help-icon">{item.icon}</span>
                   <div>

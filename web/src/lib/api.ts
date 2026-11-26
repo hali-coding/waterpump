@@ -1,4 +1,5 @@
 import type {
+  Features, FeatureState, HealthSettings, HealthSettingsState,
   ClusterLogPage, ClusterMetrics, ImportResult, Inventory, LogFilters, LogPage, LoggingSettings, LoggingStatus, LoggingTest,
   ApiToken, AuthInfo, CreatedApiToken, HealthReport, LocalUser, Role,
   ClusterContainers, ClusterInfo, ClusterNode, ClusterNodeDetail, JoinCode, JoinResult,
@@ -291,6 +292,12 @@ export const calls = {
   saveLogging: (settings: LoggingSettings): ApiCall =>
     ({ method: 'PUT', path: '/logging', body: { settings } }),
 
+  /** Cluster settings, like logging: saved here and pushed to every member. */
+  saveFeatures: (settings: Features): ApiCall =>
+    ({ method: 'PUT', path: '/features', body: { settings } }),
+  saveHealthSettings: (settings: HealthSettings): ApiCall =>
+    ({ method: 'PUT', path: '/health/settings', body: { settings } }),
+
   configureNode: (body: ConfigureNodeRequest): ApiCall =>
     ({ method: 'POST', path: '/configure', body }),
 
@@ -328,6 +335,17 @@ export const api = {
 
   saveLogging: (settings: LoggingSettings) =>
     send<Synced<{ name: string; value: LoggingSettings }>>(calls.saveLogging(settings)),
+
+  features: (signal?: AbortSignal) => request<FeatureState>('/features', { signal }),
+
+  saveFeatures: (settings: Features) =>
+    send<Synced<{ name: string; value: Features }>>(calls.saveFeatures(settings)),
+
+  healthSettings: (signal?: AbortSignal) =>
+    request<HealthSettingsState>('/health/settings', { signal }),
+
+  saveHealthSettings: (settings: HealthSettings) =>
+    send<Synced<{ name: string; value: HealthSettings }>>(calls.saveHealthSettings(settings)),
 
   /** One node's live tail: events after `after`, waiting up to `wait` seconds. */
   logs: (params: LogFilters & { after?: string; wait?: number; limit?: number },

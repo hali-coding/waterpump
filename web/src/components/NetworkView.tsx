@@ -22,10 +22,14 @@ import { SubnetField } from './SubnetField'
 
 interface Props {
   onNotify: (kind: ToastKind, title: string, detail?: string) => void
+  /** Whether the experimental fabrics are switched on (Settings → Features). */
+  fabrics: boolean
+  federated: boolean
+  onOpenSettings: () => void
 }
 
 /** How the daemon's networking is wired up, and the bridges waterpump manages. */
-export function NetworkView({ onNotify }: Props) {
+export function NetworkView({ onNotify, fabrics, federated, onOpenSettings }: Props) {
   const canWrite = useCanWrite()
   const [summaries, setSummaries] = useState<NetworkSummary[] | null>(null)
   const [details, setDetails] = useState<Record<string, NetworkDetail>>({})
@@ -148,9 +152,19 @@ export function NetworkView({ onNotify }: Props) {
         <div className="banner banner-error"><div className="banner-body"><p>{error}</p></div></div>
       )}
 
-      <FabricsSection onNotify={onNotify} onChanged={load}
-        creating={wizard === 'fabric'} onCreateClosed={() => setWizard(null)}
-        onBack={() => setWizard('choose')} />
+      {fabrics ? (
+        <FabricsSection onNotify={onNotify} onChanged={load}
+          creating={wizard === 'fabric'} onCreateClosed={() => setWizard(null)}
+          onBack={() => setWizard('choose')} />
+      ) : federated && (
+        <p className="faint" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
+          Instances on different nodes reach each other through their hosts. A routed
+          network spanning every node (a fabric) is an experimental feature:{' '}
+          <button type="button" className="link-btn" onClick={onOpenSettings}>
+            switch it on in Settings
+          </button>.
+        </p>
+      )}
 
       <div className="storage-toolbar">
         <span className="faint" style={{ fontSize: 12.5 }}>
@@ -277,7 +291,7 @@ export function NetworkView({ onNotify }: Props) {
       )}
 
       {wizard === 'choose' && (
-        <NetworkWizard onCancel={() => setWizard(null)} onPick={setWizard} />
+        <NetworkWizard onCancel={() => setWizard(null)} onPick={setWizard} fabrics={fabrics} />
       )}
       {wizard === 'bridge' && (
         <NetworkDialog

@@ -92,6 +92,8 @@ export interface ManagedNetwork {
 
 export interface Status {
   connected: boolean
+  /** The cluster's experimental features in force here (features.py). */
+  features: Features
   ready: boolean
   issues: string[]
   /** Which daemon we are talking to. */
@@ -1531,7 +1533,7 @@ export interface NodeGroup {
   members: string[]
   /** Members that are not nodes here -- removed, or not enrolled yet. */
   unknown_members: string[]
-  /** `large` and `small`: sized by the cluster, not editable by hand. */
+  /** `all`, `large` and `small`: kept by the cluster, not editable by hand. */
   managed: boolean
 }
 
@@ -1803,6 +1805,41 @@ export type LogDestination = SyslogDestination
 export type LogLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error'
 
 /** The cluster's logging setting, as `eventlog.clean_settings()` returns it. */
+/** Experimental features: off on a new install, on wherever already used. */
+export interface Features {
+  stacks: boolean
+  fabrics: boolean
+}
+
+export type FeatureName = keyof Features
+
+export interface FeatureState {
+  settings: Features
+  /** Whether anyone has chosen: unchosen, a feature is on only where it is used. */
+  saved: boolean
+  /** What holds each feature on: it cannot be switched off while any exist. */
+  in_use: Record<FeatureName, string[]>
+}
+
+export interface HealthSettings {
+  enabled: boolean
+  interval_seconds: number
+  cpu_percent: number
+  memory_percent: number
+  load_average: number
+  probe_timeout_seconds: number
+  failures_before_unhealthy: number
+  start_grace_seconds: number
+}
+
+export interface HealthSettingsState {
+  settings: HealthSettings
+  /** cluster: the shared record; node: this node's old config file; default: neither. */
+  source: 'cluster' | 'node' | 'default'
+  warning: string | null
+  defaults: HealthSettings
+}
+
 export interface LoggingSettings {
   level: LogLevel
   local: { facility: string }

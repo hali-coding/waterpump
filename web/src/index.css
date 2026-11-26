@@ -1548,6 +1548,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Cluster tab > Logging: the settings form, and one row per remote destination. */
 .logging-body { display: grid; gap: 14px; padding: 14px; border-bottom: 1px solid var(--border); }
 .logging-local { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .logging-local .select { width: auto; }
 .logging-destination {
   display: grid;

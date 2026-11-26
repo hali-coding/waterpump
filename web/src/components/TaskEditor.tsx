@@ -58,8 +58,10 @@ export function TaskEditor({ task, templates, modules, groups, nodes, onSaved, o
     Object.entries(task?.inputs ?? {}).map(([n, spec]) => ({ ...spec, name: n })))
   const [secrets, setSecrets] = useState<SecretRow[]>(
     Object.entries(task?.secrets ?? {}).map(([n, spec]) => ({ name: n, ...spec })))
+  // A new task starts on `all`, every member: the one group a single server
+  // has, which grows with the cluster. Still a choice the record makes.
   const [targets, setTargets] = useState<Targets>({
-    groups: task?.groups ?? [], nodes: task?.nodes ?? [] })
+    groups: task?.groups ?? ['all'], nodes: task?.nodes ?? [] })
   const [timeout, setTimeoutText] = useState(String(task?.timeout_seconds ?? TIMEOUT.fallback))
   const [overlap, setOverlap] = useState<'skip' | 'allow'>(task?.overlap ?? 'skip')
   const [hooked, setHooked] = useState(!!task?.webhook)
