@@ -617,9 +617,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .modal-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .modal-body { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 
-/* The form keeps the width it was designed at; the explorer takes the rest. */
+/* The form keeps the width it was designed at; the explorer takes the rest.
+   The explorer's floor matters: a fixed-max track is filled before a 1fr
+   one gets anything, so without it a large form at a middling viewport
+   (1100px, say, above the stacking breakpoint) left the explorer no width
+   at all. Below its floor the form gives way instead, down to half. */
 .modal-box-api { max-width: min(calc(var(--modal-form, 820px) + 560px), 100%); }
-.modal-split { display: grid; grid-template-columns: minmax(0, var(--modal-form, 820px)) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.modal-split { display: grid; grid-template-columns: minmax(0, var(--modal-form, 820px)) minmax(min(380px, 50%), 1fr); grid-template-rows: minmax(0, 1fr); }
 
 .api-explorer {
   display: flex;
