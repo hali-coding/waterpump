@@ -2994,7 +2994,7 @@ class ClusterService:
                 # A person's choice only: a member relaying one decided it
                 # where the check already ran, and refusing it here would
                 # leave the cluster split.
-                features.refuse_off(value)
+                features.refuse_off(value, self._features_elsewhere(value))
         except _SETTING_ERRORS as exc:
             raise ClusterError(exc.message, exc.code)
         store.save_setting(name, {"value": value})
@@ -3003,6 +3003,30 @@ class ClusterService:
         eventlog.event("change", "setting.save", level=eventlog.NOTICE, setting=name,
                        summary=_setting_summary(name, value))
         return self._with_sync({"name": name, "value": value}, "settings", name, propagate)
+
+    def _features_elsewhere(self, value):
+        """``{node: {feature: [names]}}``: what each other member still uses of
+        the features ``value`` switches off.
+
+        Best effort, like `StackService.peer_runs()`: a member that does not
+        answer (or predates the flags) is passed over rather than holding the
+        switch hostage, and loses nothing by it -- its own `effective()` keeps
+        the feature on while anything of it is there.
+        """
+        if not features.switching_off(value) or not self.cluster_secret():
+            return {}
+        local = self.local_name()
+        peers = sorted(n for n in self._peers() if n != local)
+
+        def ask(node):
+            try:
+                state = self.client(node, timeout=PROBE_TIMEOUT).request("GET", "/api/features")
+            except (NodeError, ClusterError, OSError):
+                return node, {}
+            used = state.get("in_use") if isinstance(state, dict) else None
+            return node, used if isinstance(used, dict) else {}
+
+        return {node: used for node, used in self._fanout(peers, ask) if used}
 
     def delete_setting(self, name, everywhere=True):
         """Back to the default, here and (``everywhere``) on every member."""

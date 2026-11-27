@@ -113,16 +113,28 @@ def state():
             "in_use": {name: in_use(name) for name in NAMES}}
 
 
-def refuse_off(settings):
-    """Refuse switching off a feature something still uses, naming what."""
-    for name in NAMES:
-        if settings.get(name) is False:
-            used = in_use(name)
-            if used:
-                raise FeatureError(
-                    "%s cannot be switched off while any exist (%s). Delete %s first."
-                    % (LABELS[name], ", ".join(used), "it" if len(used) == 1 else "them"),
-                    409)
+def switching_off(settings):
+    """The features ``settings`` turns off: what a refusal has to check."""
+    return [name for name in NAMES if settings.get(name) is False]
+
+
+def refuse_off(settings, elsewhere=None):
+    """Refuse switching off a feature something still uses, naming what and where.
+
+    ``elsewhere`` is ``{node: {feature: [names]}}`` from the other members: the
+    setting is the cluster's, and a stack only one member still holds (a
+    ``--local-only`` delete, say) would keep the feature on there alone.
+    """
+    for name in switching_off(settings):
+        used = list(in_use(name))
+        for node, found in sorted((elsewhere or {}).items()):
+            used.extend("%s on %s" % (item, node) for item in found.get(name) or ()
+                        if item not in used)
+        if used:
+            raise FeatureError(
+                "%s cannot be switched off while any exist (%s). Delete %s first."
+                % (LABELS[name], ", ".join(used), "it" if len(used) == 1 else "them"),
+                409)
 
 
 def require(name):

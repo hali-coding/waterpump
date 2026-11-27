@@ -119,8 +119,10 @@ hides it. Three rules, all of which keep a flag from breaking what runs:
   push, reconciliation and the fabric helper never do -- a gate on those would
   strand what exists.
 - **Switching off is refused while in use** (`refuse_off()`, in
-  `ClusterService.save_setting()`, person saves only), so off means nothing of
-  it exists.
+  `ClusterService.save_setting()`, person saves only) -- here or on any member
+  that answers (`_features_elsewhere()`, best effort, since a member that
+  cannot be asked keeps the feature on itself) -- so off means nothing of it
+  exists.
 `/api/status` carries `features` (service.py reads it straight from `store`,
 knowing nothing of the cluster), and the UI hides the Stacks tab, Home's
 stacks and the Network tab's fabrics from it (`navFor()` in App.tsx). LAN

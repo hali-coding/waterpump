@@ -44,8 +44,9 @@ Three rules keep a switch from breaking anything that already runs:
   `create` and `extend` are. Nothing that exists is touched: routes, bridges
   and instances stay as they are, and deleting, stopping and destroying still
   work.
-- **Switching off is refused while anything of it exists.** The answer names
-  what is in the way (`409`). Delete the stacks or fabrics first.
+- **Switching off is refused while anything of it exists** on any member
+  that answers. The answer names what is in the way and where (`409`).
+  Delete the stacks or fabrics first, everywhere they are.
 
 A member running a waterpump from before the switch existed knows no
 `features` setting: it reports the push as not synced, carries on, and shows
