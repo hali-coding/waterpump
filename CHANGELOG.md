@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.12.0](https://github.com/hali-coding/waterpump/compare/v0.11.1...v0.12.0) (2026-11-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* on a fresh install, `stack-save` and `fabric check|create|extend` are refused until the feature is switched on (`waterpump features-set --enable stacks`). A node group someone saved under the name `all` is now ignored in favour of the managed one, so whatever named it reaches every member; `serve` warns at start when such a group exists.
+
+### Features
+
+* put instances and tasks first; stacks and fabrics become opt-in ([4a519fd](https://github.com/hali-coding/waterpump/commit/4a519fd4b77665021a379a00529491a5351a170b))
+
+
+### Bug fixes
+
+* refuse switching a feature off while any member still uses it ([9b8547c](https://github.com/hali-coding/waterpump/commit/9b8547cc4ce7cd1f132060438aa2a7a8c9842cdb))
+* **web:** keep the API explorer a usable width beside a wide form ([11c7e4a](https://github.com/hali-coding/waterpump/commit/11c7e4a8a5cb73457108bab4558f17b00023f8b8))
+* **web:** wider dialogs, a steady Launch button, features last in Settings ([2b458fb](https://github.com/hali-coding/waterpump/commit/2b458fbd6a3665ff01386b450d270be44bd5f428))
+
+
+### Documentation
+
+* gather stacks and fabrics under experimental.md ([562f57f](https://github.com/hali-coding/waterpump/commit/562f57fd1072d2c4e0aa526cd69bde4b569f380d))
+* reposition waterpump around instances and tasks ([63b2061](https://github.com/hali-coding/waterpump/commit/63b2061b396f8cb8500db8b6d2bd0f1dc424af78))
+
 ## [0.11.1](https://github.com/hali-coding/waterpump/compare/v0.11.0...v0.11.1) (2026-11-08)
 
 
