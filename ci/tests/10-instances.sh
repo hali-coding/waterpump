@@ -66,7 +66,7 @@ if waiting:
     sleep 15
 done
 
-wp "$SET" "$FIRST_IP" template-exec "$tpl" --json -- sh -c 'cat /etc/os-release >/dev/null && echo ok' \
+wp "$SET" "$FIRST_IP" template-exec --json "$tpl" -- sh -c 'cat /etc/os-release >/dev/null && echo ok' \
     </dev/null | python3 -c '
 import json, sys
 r = json.load(sys.stdin)
