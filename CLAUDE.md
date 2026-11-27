@@ -42,8 +42,9 @@ ci/dev-cluster.sh ssh 1 [cmd]       # a shell (or one command) on node 1; `updat
 There is **no unit test suite**. Verify changes by running the CLI or the server against a
 live daemon. `./waterpump status` reports which socket and flavor it resolved; `--json` on
 any CLI command prints the same payload the REST API returns. The integration tests are
-`.github/scripts/daemon_smoke.sh` (one node) and `ci/tests/` (a four-node mixed cluster,
-see "Cluster CI" below); `ci/dev-cluster.sh test` runs the latter against a dev cluster.
+`.github/scripts/daemon_smoke.sh` (one node, run by `ci/smoke.sh` on the first CI node
+before the cluster forms) and `ci/tests/` (a four-node mixed cluster, see "Cluster CI"
+below); `ci/dev-cluster.sh test` runs the latter against a dev cluster.
 
 ## Hard constraints
 

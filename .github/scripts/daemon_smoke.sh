@@ -1,14 +1,15 @@
 #!/bin/sh
-# CI check against a live daemon: the part of waterpump pr.yml's other jobs
-# cannot reach, run by daemon.yml on the self-hosted `waterpump-daemon` runner,
-# once per Python version in its matrix. Everything goes through ./waterpump,
-# so the CLI, ContainerService and lxd.py are exercised the way a user drives
-# them, and `serve` is checked over real HTTP.
+# Single-node check against a live daemon: the part of waterpump pr.yml's
+# hosted jobs cannot reach, run by cluster.yml on one CI node (ci/smoke.sh)
+# before the cluster is formed, and by hand on any host with a daemon.
+# Everything goes through ./waterpump, so the CLI, ContainerService and
+# lxd.py are exercised the way a user drives them, and `serve` is checked
+# over real HTTP. WATERPUMP_FLAVOR picks the daemon (default incus).
 #
-# The runner is long-lived, so every name carries the run id (and the Python,
-# since daemon.yml runs this once per version in one run) and the trap
-# removes what this run made even when a step fails -- a leftover instance
-# would otherwise sit on a 1 GB VM until someone noticed.
+# It may run on a host that is in use -- a dev cluster's node, a
+# workstation -- so it keeps its own data dir and port, every name carries
+# the run id and the Python, and the trap removes what this run made even
+# when a step fails.
 set -eu
 
 flavor=${WATERPUMP_FLAVOR:-incus}

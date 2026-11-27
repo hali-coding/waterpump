@@ -102,7 +102,7 @@ dev cluster is up fails at once with a message saying so.
 ## The CI run, by hand
 
 ```sh
-ci/up.sh ci && ci/install.sh ci && ci/cluster.sh ci && ci/tests/run.sh ci
+ci/up.sh ci && ci/install.sh ci && ci/smoke.sh ci && ci/cluster.sh ci && ci/tests/run.sh ci
 ci/collect.sh ci /tmp/logs       # what a failing run uploads
 ci/down.sh ci
 ```
