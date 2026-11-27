@@ -1,6 +1,7 @@
 # The cluster check: four fresh VMs on the CI Proxmox host -- Ubuntu and
 # Alma on LXD, Debian and Fedora on Incus -- with this commit's waterpump
-# installed as a service, federated into one cluster, then ci/tests run
+# installed as a service, a single-node smoke test on the first of them
+# (ci/smoke.sh), then federated into one cluster and ci/tests run
 # against it. Everything it does is a script under ci/ that also runs from
 # a workstation; see ci/README.md and docs/development.md.
 #
@@ -72,6 +73,12 @@ jobs:
 
       - name: Install waterpump
         run: ci/install.sh ci
+
+      # One node on its own, before there is a cluster: the CLI, exec,
+      # snapshots, templates and serve against that node's daemon. A fault
+      # here fails as itself, before federation can make it look like four.
+      - name: Single-node smoke test
+        run: ci/smoke.sh ci
 
       - name: Form the cluster
         run: ci/cluster.sh ci

@@ -158,8 +158,10 @@ The previous host, Proxmox VE 9.2, reached as `ssh root@sysvmbox5`. VMs on
 vmbr29 (`192.168.29.0/24`, static addresses, NAT'd out by the host's
 192.168.0.0/16 masquerade). The firedrill VMs are gone; it now has:
 - VM 103 `waterpump-runner` (.20; Debian 13, Incus 6.0.4, 2 vCPU / 1 GB / 20G),
-  rebuilt 2026-10-17: the self-hosted GitHub Actions runner for `pr.yml`'s
-  `daemon` job, label `waterpump-daemon`. It runs as `ci` (in `incus-admin`) from
+  rebuilt 2026-10-17: the self-hosted GitHub Actions runner for what was
+  `pr.yml`'s `daemon` job, label `waterpump-daemon`. That job was removed on
+  2026-11-27 (the runner kept losing contact); the smoke now runs on a CI
+  node via `ci/smoke.sh`, so nothing uses this runner. It runs as `ci` (in `incus-admin`) from
   `~ci/actions-runner`, as system unit
   `actions.runner.hali-coding-waterpump.waterpump-runner`.
   Reach it with `ssh -J root@sysvmbox5 ci@192.168.29.20`.

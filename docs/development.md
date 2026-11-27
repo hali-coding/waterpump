@@ -27,7 +27,7 @@ modules/           # bootstrap modules (POSIX sh); _prelude.sh is prepended to e
 web/               # Vite + React + TypeScript UI; builds to web/dist, not in git
 systemd/           # service units and installer
 docs/              # the user documentation
-.github/           # workflows; scripts/ holds the release bundle and the daemon smoke test
+.github/           # workflows; scripts/ holds the release bundle and the single-node smoke test
 ci/                # the cluster CI on Proxmox: templates, VM sets, tests (ci/README.md)
 ```
 
@@ -77,22 +77,17 @@ both halves of that without a daemon:
   cannot see that inside a function body. vermin is a CI tool only. To run it
   locally: `uvx vermin --target=3.10- --violations --no-tips src/waterpump`.
 
-The live-daemon job below then runs real code paths on the floor and the newest
-Python.
+Code paths that need a daemon run under each CI node's own distro Python, in
+the cluster job below; nothing runs them on 3.10 itself.
 
-## The live-daemon CI job
+## The single-node smoke test
 
-GitHub's hosted runners have no LXD or Incus, so the live-daemon check is a
-workflow of its own, `daemon.yml`, run on a self-hosted runner labelled
-`waterpump-daemon`. The runner is a small Debian 13 VM (2 vCPU, 1 GB) with
-Incus. `pr.yml` calls it only after the hosted jobs pass, so a change that
-fails those never takes the runner's time. It can also be started on its own
-from the Actions tab, against any branch.
-
-It runs `.github/scripts/daemon_smoke.sh` twice, one run after the other:
-under Python 3.10 and under the newest release. Each interpreter comes from uv,
-so nothing on the VM is set up by hand. You can also run the script by hand on
-any host with a daemon. It covers:
+`.github/scripts/daemon_smoke.sh` drives one waterpump against one daemon, with
+no cluster. The cluster job runs it on the first CI node (`ci/smoke.sh`), after
+the install and before the cluster is formed, so a fault on the everyday path
+fails as itself rather than as a cluster test failing on every node. You can
+also run it by hand on any host with a daemon (`WATERPUMP_FLAVOR` picks which),
+or on a dev cluster's node with `ci/smoke.sh dev [node]`. It covers:
 
 - `status`
 - a create on Alpine with the `base` module
@@ -105,18 +100,10 @@ any host with a daemon. It covers:
   `/api/template-runs`
 - template delete, then stop and delete
 
-Every name in the script carries the run id and the Python version, and a
-trap removes what the run made, because the VM is long-lived.
-
-The repository is public, and the runner's user can drive the daemon, which is
-as good as root on that VM. So:
-
-- The job is skipped for PRs from forks. To check a fork's change, push it to
-  a branch here.
-- Every PR from an outside contributor needs approval before any workflow runs
-  (Settings → Actions → General). The job's `if:` is not enough on its own: a
-  PR's workflows run from the PR's copy of the files, so a fork could simply
-  delete the condition.
+It keeps its own data dir and serves on its own port (18099), beside any
+`serve` already on the host, and every name carries the run id and the Python
+version, with a trap removing what the run made: the host it runs on may be in
+use.
 
 ## The cluster CI job
 
@@ -134,8 +121,9 @@ Each daemon runs on one node at the oldest version a cluster member may run
 only works on new daemons fails here rather than for a user.
 
 It installs this commit as the ci user's systemd service on each VM, forms a
-cluster, and runs `ci/tests/`. `pr.yml` calls it beside `daemon.yml`, gated the
-same way. It can also be started by hand. Every step is a script under `ci/`
+cluster, and runs `ci/tests/`, with the single-node smoke test above on the
+first node before the cluster is formed. `pr.yml` calls it after the hosted
+jobs pass, so a change that fails those never takes the host's time. It can also be started by hand. Every step is a script under `ci/`
 that also runs from a workstation. `ci/README.md` has the commands, and
 `ci/dev-cluster.sh` keeps a cluster up for manual testing.
 
@@ -177,7 +165,14 @@ How it is put together, and why:
     static route via the host.
   - Each run's ssh key is generated in the job and gone with it.
 
-The same rules as `daemon.yml` keep forks and Dependabot off the runner.
+The repository is public, and the job runs the PR's code with that token. So:
+
+- The job is skipped for PRs from forks and from Dependabot. To check such a
+  change, push it to a branch here or start the workflow by hand.
+- Every PR from an outside contributor needs approval before any workflow runs
+  (Settings → Actions → General). The job's `if:` is not enough on its own: a
+  PR's workflows run from the PR's copy of the files, so a fork could simply
+  delete the condition.
 
 ## Releases
 

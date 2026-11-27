@@ -1,9 +1,9 @@
 # Runs on every pull request: the checks documented in CLAUDE.md's
 # "Commands" section, since that's the closest thing this project has to a
 # test suite. GitHub's runners have no LXD/Incus daemon, so everything that
-# needs one runs in the `daemon` job on a self-hosted runner (see
-# docs/development.md); anything beyond its smoke test is still verified by
-# hand against a real daemon, as CLAUDE.md describes.
+# needs one runs in the `cluster` job on the CI Proxmox host (see
+# docs/development.md): a single-node smoke test, then ci/tests on the
+# federated cluster.
 name: PR
 
 on:
@@ -161,30 +161,18 @@ jobs:
           test -f web/dist/index.html
           ./waterpump --help > /dev/null
 
-  daemon:
-    name: Live daemon
-    # The one job with a real daemon, in its own workflow (daemon.yml): a
-    # small Debian 13 VM with Incus, running a self-hosted runner. It waits
-    # for the hosted jobs, so a change that fails those never takes the one
-    # runner's time. The repo is public and that VM's runner user is in
-    # incus-admin (root-equivalent), so a fork's PR never gets here -- it
-    # would be running its own code on our host. Same-repo PRs and manual runs
-    # only; a fork's change is checked here after it is pushed to a branch.
-    # Dependabot's branches are same-repo but no more reviewed than a fork's:
-    # bumping an action would run its new code on that host before anyone had
-    # read it. An npm bump has nothing to prove here anyway, as the smoke
-    # never builds the UI. A manual run still covers a Dependabot branch.
-    needs: [python, compat, modules, web]
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event.pull_request.user.login != 'dependabot[bot]'
-    uses: ./.github/workflows/daemon.yml
-
   cluster:
     name: Cluster
     # Four VMs on the CI Proxmox host (cluster.yml): every supported OS and
-    # both daemons, federated. Gated like `daemon` above and for the same
-    # reasons -- a fork's or Dependabot's code never runs there with the
-    # host's API token -- and after the hosted jobs, so a change that does
-    # not even build never takes the host's time.
+    # both daemons, a single-node smoke test on one of them, then federated.
+    # After the hosted jobs, so a change that does not even build never
+    # takes the host's time. The repo is public and the job runs this
+    # commit's code with the host's API token, so a fork's PR never gets
+    # here: same-repo PRs and manual runs only, and a fork's change is
+    # checked after it is pushed to a branch. Dependabot's branches are
+    # same-repo but no more reviewed than a fork's -- bumping an action
+    # would run its new code there before anyone had read it -- and a
+    # manual run still covers one.
     needs: [python, compat, modules, web]
     if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event.pull_request.user.login != 'dependabot[bot]'
     uses: ./.github/workflows/cluster.yml
