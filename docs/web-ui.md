@@ -21,6 +21,31 @@ result, not a failure for the rest. The notification afterwards says so,
 naming only the ones that did not do as asked. `waterpump start`/`stop` take
 several names for the same reason and go through the same code.
 
+## Settings
+
+**Settings** (under Infrastructure) is every setting in one place:
+
+- **Health checks.** The interval and thresholds every node judges its
+  instances by; see [Health checks](#health-checks). One setting for the
+  whole cluster, in force without a restart.
+- **Logging.** The log level and remote syslog hosts (UDP or TCP). **Send
+  test message** reports how each destination took a test line, and a node
+  that was off when the settings changed is marked **behind**, with **Push to
+  …** to send them again. See [Logging](logging.md). One setting for the
+  whole cluster.
+- **This node.** How this node is reached: its address, certificate and login
+  methods, with the `waterpump configure` section for each. Only this node can
+  say, so these are not shared. **Configure node** changes them and restarts
+  the server.
+- **Experimental features.** Switches for the experimental stacks and
+  fabrics, both off on a new install; a feature cannot be switched off while
+  anything of it exists, and the page names what. See
+  [Experimental features](experimental.md). One setting for the whole
+  cluster.
+
+A shared setting saved on one node is pushed to every member at once, and a
+node that was off catches up when it comes back, like a template.
+
 ## Configuring a new node
 
 A node starts in [unconfigured mode](security.md#unconfigured-mode) — this
@@ -81,8 +106,8 @@ without a stage.
 
 The web UI does nothing the [REST API](api.md) cannot, and the dialogs that
 create, change or delete something show how. The **API** button at the top
-right of such a dialog (new container, templates, stacks, modules, storage,
-networks, fabrics, users, node groups, invites, sync) opens a panel beside the
+right of such a dialog (new container, templates, tasks, modules, storage,
+networks, users, node groups, invites, sync, settings) opens a panel beside the
 form with the request its main button would send, as curl, JavaScript or
 Python, and it follows the form while you fill it in. It is built from the same
 code that sends the real request, so the two cannot differ.
@@ -125,7 +150,7 @@ shown at all.
 
 ## Shared definitions sync themselves
 
-Saving a template, a module, a bootstrap profile, a node group or a [stack](stacks.md) on a clustered
+Saving a template, a task, a module, a bootstrap profile or a node group on a clustered
 node pushes it to every other member as part of the save, and the toast says
 where it went — or names the node that missed it and points at Sync. Deleting
 one offers to remove it from the others too, ticked by default; untick it to
@@ -208,12 +233,8 @@ its settings. It has five parts:
   trust the absence of.
 - **Node groups** — a name for a set of nodes, so a launch or a sync can say
   "everywhere" once. A member that is not a node here is marked in red.
-- **Configuration** — settings for the whole cluster, saved here and pushed to
-  every member. **Logging** sets the log level and any remote syslog hosts
-  (UDP or TCP). **Send test message** reports how each destination took a test
-  line. A table shows each node's level and whether its destinations are
-  working. A node that was off when the settings changed is marked **behind**,
-  with **Push to …** to send them again. See [Logging](logging.md).
+- Settings for the whole cluster (features, health checks, logging) are on
+  the [Settings](#settings) page.
 
 Each of the listings loads on its own, so a call that fails leaves the rest
 of the view working. That matters here more than anywhere: this is the tab a
@@ -285,10 +306,15 @@ A VM reports its own load average through its agent. If a container's cgroup
 cannot be found or read, waterpump falls back to the container's `/proc/loadavg`;
 when that is the host's, it shows "host-wide" and does not judge it.
 
-Tune any of it with `waterpump configure health` (interval of 15 seconds or more,
-each threshold including `load_average`, probe timeout, missed probes before unhealthy, start grace);
-`serve --no-health` turns checks off for one run. A saved file that does not
-validate is ignored with a warning. The same checks run on demand from the
+Tune any of it in **Settings → Health checks** or with `waterpump configure
+health` (interval of 15 seconds or more, each threshold including
+`load_average`, probe timeout, missed probes before unhealthy, start grace).
+It is a cluster setting: saved once, pushed to every member, so every node
+judges its instances alike, and a running `serve` picks a change up within
+seconds, with no restart. A node that has never had the shared setting keeps
+using its own `config/health.json` from before, if it has one.
+`serve --no-health` turns checks off for one run, whatever is saved. A
+saved setting that does not validate is ignored with a warning. The same checks run on demand from the
 CLI, which measures CPU and load over a short window since it has no previous
 check (its load is that window's average, shown as e.g. `4.00 (5s)`):
 
@@ -322,10 +348,13 @@ without running a check:
 
 **Home** is the first screen. Across the top, one tile each for nodes
 answering, containers running, instances whose health check says degraded or
-unhealthy, stacks running and templates in use; each opens the view behind it.
-Below them, every saved stack and template with what it is running across the
-whole cluster: how many instances, on which nodes, the least healthy of them,
-and any launch, recreate or destroy under way. In a cluster a node table
+unhealthy, tasks (or how many last failed) and templates in use, plus stacks
+running when the [experimental](experimental.md) stacks are on; each opens the view behind it.
+Below them, every saved template with what it is running across the whole
+cluster: how many instances, on which nodes, the least healthy of them, and any
+launch, recreate or destroy under way. Beside it every task, with when it next
+runs and how its latest run went on whichever node ran it, running and failing
+ones first. With stacks on, a list of stacks follows. In a cluster a node table
 follows, with each member's state, daemon and running instances. Home asks
 every member, so it refreshes every ten seconds rather than every three, and
 a node that does not answer is named rather than silently left out.
@@ -444,8 +473,8 @@ instances on it should reach, and carries on in the form for the answer, with
 
 - **Private to this node** -- each other and the internet, NAT'd behind the
   host, like `lxdbr0`. The usual choice; see [Managing networks](#managing-networks).
-- **Shared across the cluster (fabric)** -- each other on every node, by their
-  own addresses; see [Fabrics](#fabrics) below.
+- **Shared across the cluster (fabric)** -- only while the experimental
+  fabrics are switched on; see [Fabrics](fabrics.md#in-the-web-ui).
 - **On your LAN** -- addressed by your router and reachable like any machine on
   it: macvlan, a bridge over a spare NIC, or the host's own NIC turned into a
   bridge, offered per NIC as it allows; see [Containers on your LAN](lan.md).
@@ -456,8 +485,7 @@ instances on it should reach, and carries on in the form for the answer, with
 managed there too, as a LAN network made on every node is -- asks whether to
 delete it on this node only or on all of them, and lists the nodes. Each node
 still refuses while something there uses it, and a refusal on one does not stop
-the others. Fabrics are not offered this: they are deleted from the Fabrics
-section, which also removes their routes.
+the others.
 
 The **Network** tab explains how container networking is actually wired up,
 rather than just listing interfaces: the bridge's IPv4/IPv6 subnets, whether
@@ -470,35 +498,6 @@ address.
 Host interfaces the daemon does not manage (`docker0`, physical NICs) are
 listed separately so it is clear what is and is not under its control, with
 host bridges marked as ones a new instance can join.
-
-### Fabrics
-
-The top of the tab is **Fabrics**: routed networks that span every node (see
-[networking.md](networking.md)). Each fabric has a card with its prefix,
-whether it NATs, and one row per node: the /24 that node holds, its gateway,
-how many of its routes to the other nodes are in place, which instances are
-attached, and a state (*ok*, *no bridge*, *routes*, *not on it*, *no answer*).
-Each row is the node's own report, fetched from it, so a missing bridge or
-route on another host shows up here rather than as lost packets. The card
-polls every 10 seconds, because every poll asks each member.
-
-The fabric step of **New network** is pre-filled with the first free name and /16,
-checked against every interface and route on every node. Editing either field
-checks again, shows the /24 each node would get, and names the node and
-interface that any overlap is with. The fabric is created on every node at
-once, so every node must be reachable: while one is not, the step says which
-node it is, that the way on without it is to evict it on the Cluster tab, and
-will not create.
-**Add missing nodes** gives a subnet to members that lack one, and **Delete**
-removes the fabric everywhere once no instance is attached to it. **Apply**
-and **Show plan** act on this node's routes and firewall.
-
-In the create and template dialogs, fabrics are a group of their own in the
-**Network** picker, so there is one choice to make. A fabric with NAT becomes
-the instance's only NIC: it reaches the fabric on every node directly and the
-internet through the NAT. A fabric without NAT cannot carry internet traffic,
-so it is added as a second NIC beside the default network. The hint under the
-picker says which of the two you get.
 
 ### Managing networks
 

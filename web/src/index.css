@@ -588,9 +588,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   animation: fade 0.15s ease;
 }
 
+/* The form's width, by size; the API explorer, when open, gets its own
+   column beside it rather than squeezing the form. */
+.modal-box-sm { --modal-form: 520px; }
+.modal-box-md { --modal-form: 820px; }
+.modal-box-lg { --modal-form: 1200px; }
 .modal-box {
   width: 100%;
-  max-width: 520px;
+  max-width: var(--modal-form, 820px);
   max-height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
@@ -612,9 +617,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .modal-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .modal-body { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 
-/* The form keeps the width it was designed at; the explorer takes the rest. */
-.modal-box-api { max-width: 1080px; }
-.modal-split { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+/* The form keeps the width it was designed at; the explorer takes the rest.
+   The explorer's floor matters: a fixed-max track is filled before a 1fr
+   one gets anything, so without it a large form at a middling viewport
+   (1100px, say, above the stacking breakpoint) left the explorer no width
+   at all. Below its floor the form gives way instead, down to half. */
+.modal-box-api { max-width: min(calc(var(--modal-form, 820px) + 560px), 100%); }
+.modal-split { display: grid; grid-template-columns: minmax(0, var(--modal-form, 820px)) minmax(min(380px, 50%), 1fr); grid-template-rows: minmax(0, 1fr); }
 
 .api-explorer {
   display: flex;
@@ -1548,6 +1557,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Cluster tab > Logging: the settings form, and one row per remote destination. */
 .logging-body { display: grid; gap: 14px; padding: 14px; border-bottom: 1px solid var(--border); }
 .logging-local { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .logging-local .select { width: auto; }
 .logging-destination {
   display: grid;

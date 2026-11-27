@@ -10,7 +10,7 @@ loses nothing but that node.
 
 A task is made of parts waterpump already has:
 
-- **A [template](templates.md)**: image, size, network, fabric, and the
+- **A [template](templates.md)**: image, size, network, and the
   template's own modules. Its setup is whatever the template does.
 - **The job**: either ordinary [modules](modules.md) or a **script pasted
   into the task**, run as a second pass once the template's modules are done.
@@ -22,7 +22,7 @@ A task is made of parts waterpump already has:
 - **Secrets**: kept sealed on every member and handed to the job.
 
 ```bash
-./waterpump task-save nightly-dump -t "Debian" -b pg-dump --group workers \
+./waterpump task-save nightly-dump -t "Debian" -b pg-dump --group all \
     --cron "0 2 * * *" --tz Europe/Stockholm \
     --secret DB_PASSWORD --param 'PGPASSWORD={{secrets.DB_PASSWORD}}'
 ./waterpump task-secret-set nightly-dump DB_PASSWORD  # from $DB_PASSWORD or a prompt
@@ -36,8 +36,10 @@ A task is placed on **node groups**, never on a node alone and never on
 "anywhere". A task tied to one node stops when that node does, which is the
 single owner tasks exist to avoid. A group, by contrast, can gain a member
 when the one it has is gone. `large` and `small` (the cluster's own sizing)
-are groups too. So is a group of one node, which is how to pin a task to one
-host if you really mean to.
+are groups too, and so is `all`: every member, kept by waterpump, which is
+what a new task runs on. On a single server `all` holds that server, so a
+task needs nothing set up first, and it widens by itself as nodes join. A
+group of one node is how to pin a task to one host if you really mean to.
 
 - Saving a task without a group is refused. A group that does not exist here
   is refused too. A group with no members is saved with a warning.
@@ -123,7 +125,7 @@ script, never both.
   it.
 
 ```bash
-./waterpump task-save ping-hook -t Debian --group workers --secret API_KEY --script hook.sh
+./waterpump task-save ping-hook -t Debian --group all --secret API_KEY --script hook.sh
 ```
 
 where `hook.sh` is:
@@ -359,8 +361,8 @@ Things to know:
   left.
 - A runner on a **public** repository runs whatever a fork's pull request
   asks of it. Require approval for outside contributors, use a label only
-  your own workflows ask for, and keep the template off fabrics and LAN
-  networks so a job cannot reach the rest of the cluster.
+  your own workflows ask for, and keep the template off LAN networks (and
+  fabrics) so a job cannot reach the rest of the cluster.
 - A delivery id is remembered by the process that received it, so a
   redelivery to a different member, or after a restart, starts a second run.
   That costs one idle runner, which gives up as above.
@@ -376,8 +378,12 @@ secrets and last run. Its buttons:
 - **Delete** removes the task from every member.
 - A secret's button sets its value.
 
+A new task starts on the group `all`, so on a single server it can be saved
+and run straight away; **Runs on** changes it.
+
 Below the tasks, **Runs** lists every member's runs. Click one for its full
-output.
+output. **Home** shows each task too, with its next run and how its latest
+run went.
 
 The editor's **GitHub webhook** section turns the webhook on, picks the
 secret it is signed with, and shows the URL to give GitHub.
@@ -411,7 +417,7 @@ for the run as typed.
 
 `task-save` with flags changes only what the flags name, so an existing
 task's other fields are kept. `task-run` hands the run to this node's `serve`
-when one is running, like `stack-launch`, so the run outlives the command and
+when one is running, like `launch`, so the run outlives the command and
 shows in the UI.
 
 ## API
@@ -439,10 +445,10 @@ shows in the UI.
 
 | Path | What |
 | --- | --- |
-| `tasks/<name>.json` | the definition: synced and reconciled like a stack |
+| `tasks/<name>.json` | the definition: synced and reconciled like a template |
 | `auth/task-secrets.json` | secret values, sealed under this node's key (`auth/secrets.key`) |
 | `task-runs/<name>.json` | this node's last 50 runs of the task, never synced |
 | `task-grants.json` | this node's votes, kept an hour past each occurrence, never synced |
 
-Deleting a template or a module that a task uses is refused while the task
-uses it, as for stacks.
+Deleting a template, a module or a node group that a task uses is refused
+while the task uses it.

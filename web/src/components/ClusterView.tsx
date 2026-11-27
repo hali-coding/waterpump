@@ -9,7 +9,6 @@ import type {
 import { ConfirmDialog } from './ConfirmDialog'
 import { InventoryPanel } from './InventoryPanel'
 import { CopyButton } from './CopyButton'
-import { LoggingSettings } from './LoggingSettings'
 import {
   EjectIcon, KeyIcon, LogoutIcon, PlusIcon, RefreshIcon, ScalesIcon, ServerIcon, ShieldIcon,
   TrashIcon, UploadIcon, WrenchIcon,
@@ -424,7 +423,7 @@ export function ClusterView({ onNotify, onMembershipChanged, setup, onConfigure 
                     <strong>{group.name}</strong>
                     {group.managed && (
                       <span className="badge badge-dim" style={{ marginLeft: 6 }}
-                        title="Sized by waterpump from each node's CPU and memory">
+                        title={group.name === 'all' ? 'Every member, kept by waterpump' : "Sized by waterpump from each node's CPU and memory"}>
                         auto
                       </span>
                     )}
@@ -465,14 +464,6 @@ export function ClusterView({ onNotify, onMembershipChanged, setup, onConfigure 
           </div>
         )}
       </section>
-
-      <div className="section-head" style={{ marginTop: 8 }}>
-        <h2>Configuration</h2>
-        <span className="faint" style={{ fontSize: 12.5 }}>
-          settings every member of the cluster shares
-        </span>
-      </div>
-      <LoggingSettings nodes={nodes ?? []} canWrite={canWrite} onNotify={onNotify} />
 
       {dialog === 'join' && (
         <JoinDialog onCancel={() => setDialog(null)}
@@ -574,7 +565,7 @@ function DriftPanel({ report }: { report: DriftReport }) {
       <header className="access-head">
         <h3>Shared definitions</h3>
         <span className="faint">
-          templates, modules, profiles, stacks and groups, compared with every member
+          templates, tasks, modules, profiles, groups and settings, compared with every member
           {' '}when this node started and hourly since
         </span>
         <span className="faint access-head-end" title={when(report.checked)}>

@@ -18,7 +18,8 @@ from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from . import eventlog, store, websocket
+from . import eventlog, features, store, websocket
+from . import health as health_checks
 from .auth import (ADMIN, OPERATOR, READ, SESSION_COOKIE, AuthConfig, AuthError, AuthService,
                    relayed_principal)
 from .cluster import ClusterError, ClusterService, from_peer
@@ -114,6 +115,12 @@ class Router:
         return None, [], ADMIN, False
 
 
+def _health_settings():
+    settings, source, warning = health_checks.current()
+    return {"settings": settings, "source": source, "warning": warning,
+            "defaults": dict(health_checks.DEFAULT_SETTINGS)}
+
+
 def build_router(service, auth=None, cluster=None, stacks=None, setup=None, tasks=None):
     r = Router()
     NAME = r"([^/]+)"
@@ -135,6 +142,17 @@ def build_router(service, auth=None, cluster=None, stacks=None, setup=None, task
         eventlog.SETTING_NAME, body.get("settings", body)), principal=True)
     r.add("POST", r"/api/logging/test", lambda body, q, who: eventlog.test(by=who.name),
           principal=True)
+    # The experimental features (features.py) and health checks: cluster
+    # settings like logging. GET is what is in force here, with what holds a
+    # feature on and where the health settings came from.
+    r.add("GET", r"/api/features", lambda body, q: features.state())
+    r.add("PUT", r"/api/features", lambda body, q, who: cluster.save_setting(
+        features.SETTING_NAME, body.get("settings", body)), principal=True)
+    r.add("GET", r"/api/health/settings", lambda body, q: _health_settings())
+    r.add("PUT", r"/api/health/settings", lambda body, q, who: cluster.save_setting(
+        health_checks.SETTING_NAME, body.get("settings", body)), principal=True)
+    r.add("DELETE", r"/api/health/settings", lambda body, q, who: cluster.delete_setting(
+        health_checks.SETTING_NAME), principal=True)
     r.add("PUT", r"/api/settings/%s" % NAME,
           lambda body, q, who, name: _peers_only(who, _SYNCED % "Cluster settings")
           or cluster.save_setting(name, body.get("value"), propagate=False),
@@ -1800,10 +1818,19 @@ def serve(host=DEFAULT_HOST, port=DEFAULT_PORT, token=None, dev=False, quiet=Fal
         print("Note: web/dist not found -- build the UI with `./build.sh`, "
               "or use a release archive, which ships it built.")
 
+    if "all" in store.load_node_groups():
+        # From before `all` was every member: a group someone made by that
+        # name is shadowed now, and whatever named it reaches every node.
+        print("WARNING: a node group called 'all' was saved here; 'all' now means every "
+              "member of the cluster, and that group is ignored. Make a group under "
+              "another name and point its tasks and stacks at it.", file=sys.stderr)
     if health_settings is not None:
-        service.start_health_monitor(health_settings)
-        print("Health checks: %s" % ("every %gs" % health_settings["interval_seconds"]
-                                     if health_settings["enabled"] else "off"))
+        pinned_off = bool(health_settings.pop("pinned", False))
+        service.start_health_monitor(health_settings, follow=not pinned_off)
+        print("Health checks: %s" % (
+            "off (--no-health)" if pinned_off
+            else "every %gs" % health_settings["interval_seconds"]
+            if health_settings["enabled"] else "off"))
 
     service.start_metrics()
 

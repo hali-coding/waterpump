@@ -145,7 +145,7 @@ export function CreateDialog({ onCancel, onCreate, onNotify }: Props) {
   }
 
   return (
-    <Modal
+    <Modal size="lg"
       title="New container"
       subtitle="The image is downloaded on first use, which can take a minute."
       onClose={onCancel}

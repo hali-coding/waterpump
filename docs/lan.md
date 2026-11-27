@@ -66,37 +66,6 @@ waterpump network revert br0
 - **A NIC that is already a bridge's port:** nothing to do -- instances can
   join that bridge directly, and it is listed as a LAN bridge already.
 
-## Reaching the fabrics
-
-An instance on a macvlan network reaches every [fabric](networking.md)
-instance in the cluster, on any node, by its fabric address:
-
-- **Routes in the instance.** At launch waterpump gives it a static route to each
-  node's fabric subnet, via that node's LAN address -- and to its own host's
-  via the host's fabric gateway (below). They are kept where the guest's
-  network manager keeps them: a drop-in for the interface's own
-  systemd-networkd file (so networkd does not clear them as foreign), or an
-  ifupdown `if-up.d` hook elsewhere (Alpine, Debian without networkd). When
-  fabrics or members change, waterpump writes them again into every running
-  macvlan instance on that node, on the same clock as fabric routes.
-- **The fabrics let the LAN in.** Every member publishes which LAN subnets its
-  macvlan networks are on, and every fabric firewall admits them. That is the
-  whole subnet, not just waterpump's instances: any device on that LAN that adds
-  a route can reach fabric instances.
-- **The host shim.** macvlan never passes frames between a NIC and its own
-  macvlan instances, so on its own the host could not reach them, nor they its
-  fabric. waterpump adds a small macvlan interface to the host (`wpmp-<nic>`, no
-  address) that its instances *can* reach, plus a `/32` route per instance
-  through it (route protocol 134, apart from the fabric's 133), sending from the
-  host's own address on that LAN. What a fabric instance opens towards one is
-  SNAT'd to that address too (`ip waterpump_shim`). The shim is removed with the
-  last macvlan instance on that host. As a side effect the host now reaches
-  its own macvlan instances.
-
-An instance that has a fabric NIC as well already routes the whole prefix
-through it, and is left alone. The shim and the per-instance routes need the
-root helper; without it, an instance still reaches every *other* node's
-fabric.
 
 ## Converting the host's own NIC
 
@@ -144,8 +113,8 @@ network:
 
 ### Privilege
 
-Converting runs as root through the same helper as fabrics (`waterpump
-fabric-helper`, see [networking](networking.md#privilege)), which reads a
+Converting runs as root through waterpump's host helper (`waterpump
+fabric-helper`, see [Security](security.md#the-host-helper-holds-privilege-opt-in)), which reads a
 wanted state -- `{"lan": {"action": "convert", "nic": "eno1", "bridge": "br0"}}`
 -- rather than a command, and holds it to what it can check itself: the NIC is
 a physical, wired NIC that is no bridge's port yet, the bridge a free name, and
@@ -158,7 +127,6 @@ yourself.
 Docker loads `br_netfilter`, which sends bridged frames through iptables, and
 sets `FORWARD` to `DROP`: a LAN bridge on a Docker host carries nothing until
 it is let through. waterpump adds an accept in `DOCKER-USER` for each LAN bridge
-(tagged `waterpump-lan`, apart from the fabric's rules), removes it when the
-bridge goes, and puts it back after Docker restarts on the same clock as fabric
-routes. Without the helper, it says which rules to add. macvlan never passes a
+(tagged `waterpump-lan`), removes it when the bridge goes, and puts it back
+after Docker restarts. Without the helper, it says which rules to add. macvlan never passes a
 bridge and needs none.

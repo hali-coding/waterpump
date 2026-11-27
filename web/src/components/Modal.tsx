@@ -16,6 +16,12 @@ interface Props {
    * which still offers the explorer so it does not appear mid-typing.
    */
   api?: ApiCall | null
+  /**
+   * How wide the form may grow. `sm` for a question or a login, `md` (the
+   * default) for an ordinary form, `lg` for an editor with many sections,
+   * such as a task or a template. Each still fits a narrow screen.
+   */
+  size?: 'sm' | 'md' | 'lg'
 }
 
 // Open or closed follows the person from dialog to dialog: someone reading
@@ -30,7 +36,7 @@ function storedExplorer() {
   }
 }
 
-export function Modal({ title, subtitle, onClose, children, footer, api }: Props) {
+export function Modal({ title, subtitle, onClose, children, footer, api, size = 'md' }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [explorer, setExplorer] = useState(storedExplorer)
   const showExplorer = explorer && api !== undefined
@@ -76,7 +82,7 @@ export function Modal({ title, subtitle, onClose, children, footer, api }: Props
         if (event.target === event.currentTarget) closeRef.current()
       }}
     >
-      <div className={`modal-box${showExplorer ? ' modal-box-api' : ''}`} ref={box}
+      <div className={`modal-box modal-box-${size}${showExplorer ? ' modal-box-api' : ''}`} ref={box}
         role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
           <div className="modal-title">

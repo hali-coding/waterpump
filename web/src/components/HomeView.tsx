@@ -3,8 +3,8 @@ import type { ReactNode } from 'react'
 import { api } from '../lib/api'
 import { keyOf } from '../lib/instance'
 import type {
-  ClusterContainers, ClusterNode, HealthRecord, HealthStatus, InstanceTemplate, Stack,
-  StackRun, TemplateRun,
+  ClusterContainers, ClusterNode, Features, HealthRecord, HealthStatus, InstanceTemplate, Stack,
+  StackRun, Task, TaskRun, TaskRunStatus, TemplateRun,
 } from '../lib/types'
 import { ResourcesView } from './ResourcesView'
 
@@ -13,11 +13,13 @@ import { ResourcesView } from './ResourcesView'
 const POLL_INTERVAL = 10000
 
 type Instance = ClusterContainers['instances'][number]
-type Destination = 'containers' | 'templates' | 'stacks' | 'cluster'
+type Destination = 'containers' | 'templates' | 'stacks' | 'tasks' | 'cluster'
 
 interface Props {
   templateRuns: TemplateRun[]
   stackRuns: StackRun[]
+  /** Experimental features in force: stacks are shown only while they are on. */
+  features: Features | undefined
   onNavigate: (view: Destination) => void
 }
 
@@ -26,7 +28,16 @@ interface Overview {
   nodes: ClusterNode[]
   templates: InstanceTemplate[]
   stacks: Stack[]
+  tasks: Task[]
+  runs: TaskRun[]
 }
+
+const RUN_BADGE: Record<TaskRunStatus, string> = {
+  running: 'badge-info', ok: 'badge-ok', failed: 'badge-danger', timed_out: 'badge-danger',
+  cancelled: 'badge-dim', missed: 'badge-warn', vetoed: 'badge-warn', lost: 'badge-warn',
+}
+// What a task's latest run says about it; a run that never got going is not news.
+const FAILED: TaskRunStatus[] = ['failed', 'timed_out', 'lost', 'missed']
 
 // Worst first: a group of instances reads as its least healthy member.
 const SEVERITY: HealthStatus[] = ['unhealthy', 'degraded', 'starting', 'unknown', 'paused', 'healthy']
@@ -37,25 +48,30 @@ const TONE: Record<HealthStatus, string> = {
 
 /**
  * The first screen: this node's state, and what the whole cluster is running
- * as stacks and templates. Each list points at the tab that manages it.
+ * -- instances by template, and tasks with their latest runs (stacks too, when
+ * that experimental feature is on). Each list points at the tab managing it.
  */
-export function HomeView({ templateRuns, stackRuns, onNavigate }: Props) {
+export function HomeView({ templateRuns, stackRuns, features, onNavigate }: Props) {
   const [data, setData] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const withStacks = features?.stacks ?? false
   const load = useCallback((signal?: AbortSignal) => {
     Promise.all([
       api.clusterContainers({ all: true }, signal),
       api.nodes(signal),
       api.templates(signal),
-      api.stacks(signal),
-    ]).then(([cluster, nodes, templates, stacks]) => {
-      setData({ cluster, nodes, templates, stacks })
+      withStacks ? api.stacks(signal) : Promise.resolve([] as Stack[]),
+      api.tasks(signal),
+      // Every member's runs, so "last run" is the task's, wherever it ran.
+      api.taskRuns(undefined, signal).catch(() => ({ runs: [], errors: [] })),
+    ]).then(([cluster, nodes, templates, stacks, tasks, runs]) => {
+      setData({ cluster, nodes, templates, stacks, tasks, runs: runs.runs })
       setError(null)
     }).catch((cause) => {
       if ((cause as Error).name !== 'AbortError') setError((cause as Error).message)
     })
-  }, [])
+  }, [withStacks])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -82,7 +98,7 @@ export function HomeView({ templateRuns, stackRuns, onNavigate }: Props) {
         </div>
       ) : (
         <>
-          <Tiles data={data} health={health} onNavigate={onNavigate} />
+          <Tiles data={data} health={health} withStacks={withStacks} onNavigate={onNavigate} />
 
           {data.cluster.errors.length > 0 && (
             <div className="banner banner-warn">
@@ -97,23 +113,6 @@ export function HomeView({ templateRuns, stackRuns, onNavigate }: Props) {
           )}
 
           <div className="home-grid">
-            <WorkloadCard
-              title="Stacks"
-              empty="No stacks saved yet."
-              onOpen={() => onNavigate('stacks')}
-              rows={data.stacks.map((stack) => {
-                const run = stackRuns.find((r) => r.stack === stack.name && r.finished_at === null)
-                return {
-                  kind: 'stack' as const,
-                  name: stack.name,
-                  description: stack.description,
-                  members: instances.filter((i) => i.stack === stack.name),
-                  activity: run ? `${run.action === 'destroy' ? 'destroying' : `${run.action}ing`}${
-                    run.cancelling ? ' (cancelling)' : ''}` : null,
-                }
-              })}
-              health={health}
-            />
             <WorkloadCard
               title="Templates"
               empty="No templates saved yet."
@@ -131,6 +130,24 @@ export function HomeView({ templateRuns, stackRuns, onNavigate }: Props) {
               })}
               health={health}
             />
+            <TasksCard tasks={data.tasks} runs={data.runs} onOpen={() => onNavigate('tasks')} />
+            {withStacks && <WorkloadCard
+              title="Stacks"
+              empty="No stacks saved yet."
+              onOpen={() => onNavigate('stacks')}
+              rows={data.stacks.map((stack) => {
+                const run = stackRuns.find((r) => r.stack === stack.name && r.finished_at === null)
+                return {
+                  kind: 'stack' as const,
+                  name: stack.name,
+                  description: stack.description,
+                  members: instances.filter((i) => i.stack === stack.name),
+                  activity: run ? `${run.action === 'destroy' ? 'destroying' : `${run.action}ing`}${
+                    run.cancelling ? ' (cancelling)' : ''}` : null,
+                }
+              })}
+              health={health}
+            />}
           </div>
 
           {data.nodes.length > 1 && (
@@ -157,9 +174,10 @@ function runLabel(run: TemplateRun) {
   return `${verb} ${run.count}`
 }
 
-function Tiles({ data, health, onNavigate }: {
+function Tiles({ data, health, withStacks, onNavigate }: {
   data: Overview
   health: Record<string, HealthRecord>
+  withStacks: boolean
   onNavigate: (view: Destination) => void
 }) {
   const instances = data.cluster.instances
@@ -172,6 +190,8 @@ function Tiles({ data, health, onNavigate }: {
   const templatesUsed = data.templates.filter((t) =>
     instances.some((i) => i.template === t.name)).length
   const loose = instances.filter((i) => !i.template && !i.stack).length
+  const latest = latestRuns(data.runs)
+  const failing = data.tasks.filter((t) => FAILED.includes(latest.get(t.name)?.status as TaskRunStatus)).length
 
   return (
     <div className="home-tiles">
@@ -186,11 +206,89 @@ function Tiles({ data, health, onNavigate }: {
         detail={troubled ? 'degraded or unhealthy' : `${statuses.length} checked`}
         tone={troubled ? 'danger' : 'ok'}
         onClick={() => onNavigate('containers')} />
-      <Tile label="Stacks" value={`${stacksUp}/${data.stacks.length}`} detail="running"
-        onClick={() => onNavigate('stacks')} />
+      <Tile label="Tasks" value={failing ? String(failing) : String(data.tasks.length)}
+        detail={failing ? 'last run failed' : data.tasks.length === 1 ? 'task' : 'tasks'}
+        tone={failing ? 'danger' : undefined}
+        onClick={() => onNavigate('tasks')} />
+      {withStacks && (
+        <Tile label="Stacks" value={`${stacksUp}/${data.stacks.length}`} detail="running"
+          onClick={() => onNavigate('stacks')} />
+      )}
       <Tile label="Templates" value={`${templatesUsed}/${data.templates.length}`} detail="in use"
         onClick={() => onNavigate('templates')} />
     </div>
+  )
+}
+
+/** Each task's most recent run, by task name. */
+function latestRuns(runs: TaskRun[]) {
+  const latest = new Map<string, TaskRun>()
+  for (const run of runs) {
+    const seen = latest.get(run.task)
+    if (!seen || run.started_at > seen.started_at) latest.set(run.task, run)
+  }
+  return latest
+}
+
+function TasksCard({ tasks, runs, onOpen }: {
+  tasks: Task[]
+  runs: TaskRun[]
+  onOpen: () => void
+}) {
+  const latest = latestRuns(runs)
+  const running = (name: string) => runs.some((r) => r.task === name && r.status === 'running')
+  // Running and failing first: those are what someone opening Home came for.
+  const rank = (task: Task) => (running(task.name) ? 0
+    : FAILED.includes(latest.get(task.name)?.status as TaskRunStatus) ? 1 : 2)
+  const sorted = [...tasks].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  return (
+    <section className="card home-card">
+      <header className="home-card-head">
+        <h3>Tasks</h3>
+        <span className="faint">across the cluster</span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onOpen}>
+          Manage
+        </button>
+      </header>
+      {tasks.length === 0 ? (
+        <div className="empty">
+          <p>No tasks yet. A task runs a job in a throwaway instance, on a schedule or on
+            demand.</p>
+        </div>
+      ) : (
+        <ul className="home-list">
+          {sorted.map((task) => {
+            const last = latest.get(task.name)
+            return (
+              <li key={task.name} className="home-item">
+                <div className="home-item-main">
+                  <strong className="truncate">{task.name}</strong>
+                  <span className="faint truncate">
+                    {task.placement_problem ? task.placement_problem
+                      : task.next_run && task.enabled
+                        ? `next ${new Date(task.next_run * 1000).toLocaleString()}`
+                        : task.schedule_text && !task.enabled ? 'schedule paused'
+                          : 'run on demand'}
+                  </span>
+                </div>
+                <div className="home-item-meta">
+                  {running(task.name) && (
+                    <span className="badge badge-info"><span className="spinner spinner-xs" />running</span>
+                  )}
+                  {last && !running(task.name) && (
+                    <span className={`badge ${RUN_BADGE[last.status]}`}
+                      title={`Last run on ${last.node}, ${new Date(last.started_at * 1000).toLocaleString()}`}>
+                      {last.status.replace('_', ' ')}
+                    </span>
+                  )}
+                  {!last && <span className="badge badge-dim">never run</span>}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }
 

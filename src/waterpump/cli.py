@@ -13,7 +13,7 @@ import sys
 import time
 import urllib.parse
 
-from . import auth, cluster as cluster_mod, configure, nodesetup, pam
+from . import auth, cluster as cluster_mod, configure, features, nodesetup, pam
 from . import eventlog
 from . import health as health_checks
 from .auth import (METHODS, ROLES, AuthConfig, AuthError, AuthService, local_principal,
@@ -185,11 +185,12 @@ def cmd_serve(args, _service):
         # read it in `ps`.
         token = os.environ.get("WATERPUMP_TOKEN") or None
     config = auth.build_config(settings, overrides, static_token=token)
-    health_settings, warning = health_checks.load_settings()
+    health_settings, _, warning = health_checks.current()
     if warning:
         print(YELLOW("WARNING: %s" % warning), file=sys.stderr)
     if args.no_health:
-        health_settings = dict(health_settings, enabled=False)
+        # Pinned: `serve` then never re-reads the shared settings.
+        health_settings = dict(health_settings, enabled=False, pinned=True)
     serve(host=host, port=port, dev=args.dev, quiet=args.quiet,
           open_browser=args.open, auth_config=config,
           tls_cert=tls_cert, tls_key=tls_key,
@@ -2808,7 +2809,7 @@ APP_COLORS = {"ok": GREEN, "warning": ORANGE, "critical": RED, "unknown": DIM}
 
 
 def cmd_health(args, service):
-    settings, warning = health_checks.load_settings()
+    settings, _, warning = health_checks.current()
     if warning:
         print(YELLOW("! %s" % warning), file=sys.stderr)
     records = service.check_health(names=args.name or None, window=args.window, settings=settings)
@@ -3307,6 +3308,34 @@ def cmd_logging_set(args, service):
         raise ConfigureError(exc.message)
     emit(args, result, lambda r: "%s logging saved for the cluster: %s" % (
         GREEN("+"), cluster_mod._setting_summary(eventlog.SETTING_NAME, r["value"])))
+    return 0
+
+
+def _render_features(r):
+    lines = []
+    for name in features.NAMES:
+        on = r["settings"][name]
+        used = r["in_use"][name]
+        lines.append("%-8s %s%s" % (name, GREEN("on") if on else DIM("off"),
+                                    DIM("  (in use: %s)" % ", ".join(used)) if used else ""))
+    if not r["saved"]:
+        lines.append(DIM("Never chosen here: on where something already uses it, else off."))
+    return "\n".join(lines)
+
+
+def cmd_features(args, service):
+    emit(args, features.state(), _render_features)
+    return 0
+
+
+def cmd_features_set(args, service):
+    settings = features.effective()
+    for name in args.enable or []:
+        settings[name] = True
+    for name in args.disable or []:
+        settings[name] = False
+    cluster_service(service).save_setting(features.SETTING_NAME, settings)
+    emit(args, features.state(), _render_features)
     return 0
 
 
@@ -3852,7 +3881,7 @@ def cmd_fabric_plan(args, service):
             lines.append("  %s" % command["command"].replace("\n", "\n  "))
         if not p["privileged"]:
             lines.append("")
-            lines.append(YELLOW("waterpump cannot run these itself; see docs/networking.md."))
+            lines.append(YELLOW("waterpump cannot run these itself; see docs/fabrics.md."))
         return "\n".join(lines)
 
     emit(args, plan, render)
@@ -4365,6 +4394,16 @@ def build_parser():
                    help="for --remote (default local0)")
     p.add_argument("--no-remote", action="store_true", help="stop sending to a remote host")
     p.set_defaults(func=cmd_logging_set)
+
+    p = add("features", help="which experimental features (stacks, fabrics) are on")
+    p.set_defaults(func=cmd_features)
+
+    p = add("features-set", help="switch experimental features on or off (every member)")
+    p.add_argument("--enable", action="append", choices=list(features.NAMES), metavar="NAME",
+                   help="switch this one on: %s (repeatable)" % ", ".join(features.NAMES))
+    p.add_argument("--disable", action="append", choices=list(features.NAMES), metavar="NAME",
+                   help="switch this one off; refused while it is in use (repeatable)")
+    p.set_defaults(func=cmd_features_set)
 
     p = add("logging-test", help="send a test line to every log destination now")
     p.set_defaults(func=cmd_logging_test)
@@ -5344,7 +5383,7 @@ READ_ONLY = {
     "cluster_nodes", "cluster_status", "cluster_show", "cluster_invites", "fabric_list",
     "fabric_status", "fabric_plan", "fabric_check", "cluster_groups",
     "cluster_containers", "cluster_cert", "cluster_fingerprint", "images", "logging",
-    "logs", "inventory",
+    "logs", "inventory", "features",
 }
 # Logged by themselves: `serve` is its own process's log, and the fabric
 # helper's commands are logged by the process that asked for them.

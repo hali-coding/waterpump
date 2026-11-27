@@ -79,7 +79,7 @@ from . import cron, eventlog, store
 from .bootstrap import (BootstrapError, BootstrapRunner, check_shell_syntax, discover_modules,
                         load_prelude, missing_secrets, redact, secret_param_names,
                         split_param)
-from .cluster import ClusterError
+from .cluster import ALL_GROUP, ClusterError
 from .lxd import LXDError
 from .nodeclient import NodeError
 from .service import (RUN_OUTPUT_TAIL, TASK_CONFIG_KEY, TASK_RUN_CONFIG_KEY, ServiceError,
@@ -209,7 +209,7 @@ class TaskService:
     # -- definitions -------------------------------------------------------
 
     def list_tasks(self):
-        groups = store.load_node_groups()
+        groups = self.cluster.node_groups()
         return [self._public(task, groups) for _, task in sorted(store.load_tasks().items())]
 
     def get_task(self, name):
@@ -297,16 +297,17 @@ class TaskService:
                                            else "them", "it" if len(needed) == 1 else "them"))
         nodes = _names(nodes, "nodes")
         groups = _names(groups, "groups")
-        known_groups = store.load_node_groups()
+        known_groups = self.cluster.node_groups()
         known_nodes = set(self.cluster.all_nodes())
         # Placement is a group's business: a task tied to one node stops when
         # that node does, which is the single owner tasks exist to avoid. A
         # node may be named only beside a group, as an addition to it.
         if not groups:
             raise ServiceError(
-                "A task runs on a node group: name at least one. A group of one node is "
-                "allowed, but the point of a group is that a node can join it when the "
-                "one it has is gone.")
+                "A task runs on a node group: name at least one -- '%s' is every member, "
+                "and works on a single server. A group of one node is allowed, but the "
+                "point of a group is that a node can join it when the one it has is gone."
+                % ALL_GROUP)
         if propagate and not any(g in known_groups for g in groups):
             raise ServiceError("No node group called %s here." % " or ".join(
                 "'%s'" % g for g in groups), 404)
@@ -478,7 +479,7 @@ class TaskService:
         exactly the placement nobody chose. It runs nowhere and says so.
         """
         known = set(self.cluster.all_nodes())
-        groups = store.load_node_groups() if groups is None else groups
+        groups = self.cluster.node_groups() if groups is None else groups
         chosen = set(n for n in task["nodes"] if n in known)
         for group in task["groups"]:
             chosen.update(m for m in (groups.get(group) or {}).get("members", []) if m in known)

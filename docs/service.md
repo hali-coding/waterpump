@@ -34,11 +34,12 @@ session open, `sudo loginctl enable-linger $USER` (the installer prints this
 when it applies). The unit files are in `systemd/` if you want to edit them
 before installing.
 
-Stopping or restarting the unit sends `serve` SIGTERM. A [swarm](stacks.md#swarms-load-tests-against-a-running-stack)
-it is running is stopped and its instances destroyed first (up to a minute,
-inside systemd's default 90 s stop timeout). Other work still running -- a
-template launch, a stack between stages -- is cut off, and the journal lists
-it. Ctrl-C in a terminal waits for all of it instead.
+Stopping or restarting the unit sends `serve` SIGTERM. Work still running -- a
+template launch, a task run -- is cut off, and the journal lists it; a task
+run's instance is cleaned up when `serve` starts again. Ctrl-C in a terminal
+waits for all of it instead. (A running load-test swarm of the experimental
+[stacks](stacks.md#swarms-load-tests-against-a-running-stack) is stopped and
+torn down first.)
 
 ## Configuring the node
 
@@ -93,15 +94,16 @@ around `NoNewPrivileges=yes`, which both units set and which stops PAM's
 `serve` prints a warning at startup when PAM cannot work as configured, so
 check `journalctl` after the change.
 
-The fabric (routed networking between nodes) is blocked for the same reason:
-it raises privilege through `sudo` for one command. On the system unit, set
-`NoNewPrivileges=no`. On the user unit, use the drop-in below. Either way, you
-can instead program the routes yourself with `waterpump fabric apply`; the result
-is identical. See [networking.md](networking.md).
+The [host helper](security.md#the-host-helper-holds-privilege-opt-in) --
+converting a NIC for a [LAN network](lan.md), and the experimental
+[fabrics](fabrics.md#under-systemd) -- is blocked for the same reason: it
+raises privilege through `sudo` for one command. On the system unit, set
+`NoNewPrivileges=no`. On the user unit, use the drop-in below. Either way,
+waterpump can print the commands for you to run yourself instead.
 
 ### A user unit that can raise privilege
 
-For `--auth pam` or a fabric on the user unit. It gives up the sandbox, so
+For `--auth pam` or the host helper on the user unit. It gives up the sandbox, so
 waterpump can then write anywhere the account can:
 
 ```ini

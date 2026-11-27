@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "waterpump"
 version = "0.11.1"
-description = "Application orchestration on LXD and Incus: staged, multi-node stacks of instance templates"
+description = "Instances and scheduled tasks on LXD and Incus, across a cluster of mixed hosts"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []          # stdlib only, by design

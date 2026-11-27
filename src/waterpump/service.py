@@ -18,6 +18,7 @@ import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from . import eventlog
+from . import features
 from . import health as health_checks
 from . import hostnet
 from . import metrics as metric_history
@@ -279,6 +280,10 @@ def normalize_size(value, field="size"):
     return "%s%s" % (amount, _SIZE_UNITS[unit])
 
 
+# How often the health monitor looks for changed settings between rounds.
+HEALTH_SETTINGS_POLL = 5
+
+
 class ServiceError(Exception):
     def __init__(self, message, code=400):
         super().__init__(message)
@@ -495,6 +500,9 @@ class ContainerService:
 
         return {
             "connected": True,
+            # Read from the shared record each poll, so a toggle made on
+            # another member shows here as soon as its push lands.
+            "features": features.effective(),
             "ready": not issues,
             "issues": issues,
             "root_pool": root_pool,
@@ -1047,7 +1055,7 @@ class ContainerService:
         previous sample (the CLI) waits ``window`` seconds between two.
         Instances not running or frozen get no record.
         """
-        settings = settings or self._health_settings or health_checks.load_settings()[0]
+        settings = settings or self._health_settings or health_checks.current()[0]
         samples = self._health_samples(names)
         wanted = [s["name"] for s in samples if s["status"] == "Running"]
         cgroups = {s["name"]: s["cgroup"] for s in samples
@@ -1143,34 +1151,84 @@ class ContainerService:
             "instances": records,
         }
 
-    def start_health_monitor(self, settings):
-        """Check health every ``interval_seconds`` on a daemon thread, for `serve`."""
+    def start_health_monitor(self, settings, follow=True):
+        """Check health every ``interval_seconds`` on a daemon thread, for `serve`.
+
+        With ``follow`` the settings are read again before every round
+        (`health.current()`: the cluster's record, else this node's file), so
+        a save from the Settings page, the CLI or a member's push takes effect
+        without a restart -- switching checks on included, which is why the
+        thread runs even while they are off. ``follow`` off is `--no-health`:
+        the flag wins over anything saved, as flags do everywhere else.
+        """
         self._health_settings = settings
-        if not settings["enabled"]:
+        if not follow and not settings["enabled"]:
             return
-        self._load_sampler = health_checks.LoadSampler()
-        self._load_sampler.start()
-        self._app_checker = health_checks.AppChecker(self._run_app_check,
-                                                     self._app_result_landed)
-        self._app_checker.start()
+
+        def helpers():
+            # Started the first time checks are on, never stopped: both only
+            # read, and a node that switched checks off keeps them idle.
+            if self._load_sampler is None:
+                self._load_sampler = health_checks.LoadSampler()
+                self._load_sampler.start()
+            if self._app_checker is None:
+                self._app_checker = health_checks.AppChecker(self._run_app_check,
+                                                             self._app_result_landed)
+                self._app_checker.start()
 
         def loop():
             # The first round establishes CPU baselines and probes at once, so
             # liveness shows straight away and CPU from the second round on.
+            current = settings
             while True:
                 started = time.time()
-                try:
-                    self.check_health(window=0, settings=settings)
-                except Exception as exc:                    # noqa: BLE001
-                    eventlog.message("health check failed: %s" % exc, level=logging.WARNING)
-                elapsed = time.time() - started
+                if follow:
+                    try:
+                        current = health_checks.current()[0]
+                    except Exception as exc:                # noqa: BLE001
+                        eventlog.message("health settings unreadable: %s" % exc,
+                                         level=logging.WARNING)
+                    self._health_settings = current
+                if current["enabled"]:
+                    helpers()
+                    try:
+                        self.check_health(window=0, settings=current)
+                    except Exception as exc:                # noqa: BLE001
+                        eventlog.message("health check failed: %s" % exc,
+                                         level=logging.WARNING)
+                    wait = current["interval_seconds"]
+                else:
+                    # Off: no records to show, and nothing left to run app
+                    # checks for. Polled at the shortest interval, so turning
+                    # checks back on is felt within seconds, not a minute.
+                    self._health_off()
+                    wait = health_checks.MIN_INTERVAL
                 # Rounds never overlap: a slow one just starts the next later.
-                time.sleep(max(1.0, settings["interval_seconds"] - elapsed))
+                # Waited in slices, so a change of settings starts a round at
+                # once rather than after the old interval -- up to a day.
+                until = time.time() + max(1.0, wait - (time.time() - started))
+                while time.time() < until:
+                    time.sleep(min(HEALTH_SETTINGS_POLL, until - time.time()) if follow
+                               else until - time.time())
+                    try:
+                        if follow and health_checks.current()[0] != current:
+                            break
+                    except Exception:                      # noqa: BLE001
+                        pass
 
         def run():
             with eventlog.system("health"):
                 loop()
         threading.Thread(target=run, name="waterpump-health", daemon=True).start()
+
+    def _health_off(self):
+        with self._health_lock:
+            self._health_records.clear()
+            self._health_base.clear()
+        if self._app_checker is not None:
+            self._app_checker.set_targets({})
+        if self._load_sampler is not None:
+            self._load_sampler.set_targets({})
 
     # -- performance history -------------------------------------------------
 
@@ -3400,7 +3458,7 @@ class ContainerService:
     # than the daemon: a bridge over a spare NIC, macvlan on any wired one, or
     # the NIC the host uses turned into a bridge port. Which of those a NIC
     # allows depends on it, so the choice is offered per NIC -- see
-    # docs/networking.md and hostnet.py.
+    # docs/lan.md and hostnet.py.
 
     LAN_MODES = ("bridge", "macvlan", "convert")
 
@@ -3545,7 +3603,7 @@ class ContainerService:
         if not hostnet.available():
             raise ServiceError("waterpump cannot run its helper as root here, so it "
                                "cannot convert %s. Run the commands it shows yourself, "
-                               "or install the sudo rule (docs/networking.md)." % nic, 503)
+                               "or install the sudo rule (docs/security.md)." % nic, 503)
         answer = hostnet.delegate({"lan": {"action": "convert", "nic": nic,
                                            "bridge": bridge}}, timeout=300)
         if not answer.get("ok"):

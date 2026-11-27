@@ -135,6 +135,19 @@ of it: then it stays until the next build.
   exits 100 asks for a reboot and is then run again, at most twice: for a new
   kernel or a boot argument.
 
+## The tests
+
+| Test | What it holds every node to |
+|---|---|
+| `00-cluster` | the daemon nodes.conf names, ready, and every member reachable |
+| `10-instances` | a template launched over group `all` (one instance per node) comes up healthy, runs a command, stops, starts and is destroyed |
+| `20-tasks` | a task on `all` runs on each node by name, leaves nothing behind, and on a one-minute schedule each occurrence runs on one node only |
+| `30-features` | the experimental flags are one cluster setting: refused stacks while off, kept on while one exists |
+
+`10-instances` and `20-tasks` pull `images:debian/13` on every node
+(`CI_TEST_IMAGE` overrides it), and `20-tasks` waits out a few scheduled
+minutes, so the whole run takes around fifteen minutes.
+
 ## Adding a test
 
 Drop `ci/tests/NN-name.sh` in. Tests run in name order against a formed

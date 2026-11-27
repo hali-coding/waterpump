@@ -384,17 +384,17 @@ export function TemplatesView({
                         onChange={(event) => setCounts((current) => ({
                           ...current, [template.name]: event.target.value }))}
                       />
+                      {/* The names it would make are only a hover away: written
+                          out beside the button, their length moved it about. */}
                       <button className="btn btn-primary"
+                        title={busy ? undefined : `Makes ${preview.length > 3
+                          ? `${preview.slice(0, 2).join(', ')} … ${preview[preview.length - 1]}`
+                          : preview.join(', ')}`}
                         disabled={!ready || !canOperate || !!busy || gone.length > 0}
                         onClick={() => requestLaunch(template)}>
                         {busy?.action === 'launch' && <span className="spinner" />}
                         {busy?.action === 'launch' ? `Launching ${busy.count}…` : 'Launch'}
                       </button>
-                      <span className="hint mono truncate" title={preview.join(', ')}>
-                        {busy ? '' : `→ ${preview.length > 3
-                          ? `${preview.slice(0, 2).join(', ')} … ${preview[preview.length - 1]}`
-                          : preview.join(', ')}`}
-                      </span>
                     </div>
                     {(members.length > 0 || (busy && busy.action !== 'launch')) && (
                       <div className="template-fleet">

@@ -1,7 +1,7 @@
 # waterpump fabric: routed, non-NAT networking between the containers of a cluster.
 #
 # Install with `systemd/install-service.sh --fabric`, which fills in the path
-# and the group for this host. See docs/networking.md.
+# and the group for this host. See docs/security.md.
 #
 # This grants one exact command. waterpump reads the routing table and /proc/sys
 # without privilege, so the only things it needs root for are writing routes

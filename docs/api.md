@@ -2,6 +2,10 @@
 
 [← back to README](../README.md)
 
+The routes of the experimental stacks and fabrics are listed with them:
+[Stacks](stacks.md#api) and [Fabrics](fabrics.md#api); see
+[Experimental features](experimental.md).
+
 All responses are `{"data": ...}` on success and `{"error": "..."}` on failure,
 with a matching HTTP status.
 
@@ -11,13 +15,13 @@ Every `GET` needs `read` access and everything else `admin`, except where the
 auth table below says otherwise and these, which need `operator`: container
 `state` (single and bulk, and `/api/cluster/containers/state` and `/delete`),
 `DELETE /api/containers/{name}`, container `exec` and `bootstrap`, template
-`launch`, `exec`, `recreate` and `destroy`, stack `launch`, `state` and
-`destroy`, task `invoke`, and cancelling or dismissing a template, stack or task run. Missing or bad
+`launch`, `exec`, `recreate` and `destroy`, task `invoke`, and cancelling or
+dismissing a template or task run. Missing or bad
 credentials get `401`, too little access `403`, too many failed logins `429`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/status` | daemon flavor/version, readiness, pools, networks |
+| `GET` | `/api/status` | daemon flavor/version, readiness, pools, networks, and `features` (`{stacks, fabrics}`: the experimental features in force) |
 | `POST` | `/api/setup` | create pool + bridge, attach to default profile |
 | `GET` | `/api/configure` | how this node is reached: `unconfigured`, bound `host`/`port`, `tls`, `auth`, `pinned` flags, saved `certificate`, `admins`, and `blocked` (why configuring is refused now, or `""`) |
 | `POST` | `/api/configure` | leave [unconfigured mode](security.md#unconfigured-mode): `{"username","password","tls":{"mode":"generate","host"}\|{"mode":"upload","cert","key"}\|{"mode":"keep"},"host":"0.0.0.0"}` → what was saved, then the server restarts; `409` in a cluster or while work is running |
@@ -26,6 +30,11 @@ credentials get `401`, too little access `403`, too many failed logins `429`.
 | `GET` | `/api/logs` | this node's [live tail](logging.md#watching-it-live): `?after=<cursor>&wait=0..25&limit=&level=&kind=&actor=&req=&channel=&instance=&q=` → `{node, boot, cursor, events, reset, truncated}`; without `after`, the latest events. Any logged-in user |
 | `GET` | `/api/cluster/logs` | every node's tail merged by time: same filters, `cursor` (opaque, from the last answer), `wait` (≤20), `nodes`/`group` → `{cursor, events (each with node), nodes: [{node, ok, error, pending, reset, truncated}]}`; returns as soon as any node has something |
 | `POST` | `/api/logging/test` | send a test line to every destination of this node now → per-destination `results` |
+| `GET` | `/api/features` | the experimental features: `settings` (`{stacks, fabrics}` in force), whether anyone has `saved` a choice, and `in_use` (what keeps each on) |
+| `PUT` | `/api/features` | `{"settings":{"stacks":bool,"fabrics":bool}}` → saved and pushed to every member; `409` turning one off while it is in use; returns `synced` |
+| `GET` | `/api/health/settings` | the health-check settings in force here: `settings`, `source` (`cluster`, `node` for a node's own file from before they were shared, or `default`), `warning`, `defaults` |
+| `PUT` | `/api/health/settings` | `{"settings":{"enabled","interval_seconds","cpu_percent","memory_percent","load_average","probe_timeout_seconds","failures_before_unhealthy","start_grace_seconds"}}` → saved and pushed to every member, in force without a restart; returns `synced` |
+| `DELETE` | `/api/health/settings` | forget the shared settings, here and on every member |
 | `PUT` | `/api/settings/{name}` | a cluster setting as stored — cluster members only (sync) |
 | `DELETE` | `/api/settings/{name}` | back to the default — cluster members only (sync) |
 | `GET` | `/api/containers` | list with live state |
@@ -105,10 +114,10 @@ credentials get `401`, too little access `403`, too many failed logins `429`.
 | `POST` | `/api/cluster/containers/delete` | delete instances that sit on several nodes |
 | *any* | `/api/nodes/{node}/{path}` | make that call against one node's own API and return its answer |
 | `GET` | `/api/cluster/groups` | node groups |
-| `PUT`/`DELETE` | `/api/cluster/groups/{name}` | create or replace / delete a group (`large` and `small` are refused: they are sized, not written; `409` deleting one a stack targets) |
+| `PUT`/`DELETE` | `/api/cluster/groups/{name}` | create or replace / delete a group (`all`, `large` and `small` are refused: waterpump keeps them; `409` deleting one a task targets). The listing starts with `all`, every member, which is derived and never stored |
 | `GET`/`POST` | `/api/cluster/invites` | unredeemed join codes / issue one |
 | `DELETE` | `/api/cluster/invites/{id}` | withdraw a join code |
-| `POST` | `/api/cluster/sync` | push templates, modules or profiles to other nodes |
+| `POST` | `/api/cluster/sync` | `{"kinds","names","nodes","groups"}` → push shared definitions (see [Nodes](cluster.md#shared-definitions-stay-level-by-themselves)) to other nodes |
 | `POST` | `/api/cluster/fingerprint` | what certificate an address presents right now |
 | `POST` | `/api/cluster/enroll` | redeem a join code — node to node, no token (see [Nodes](cluster.md)); refused (`409`) unless `node.daemon` reports LXD ≥ 5.21 or Incus ≥ 6.0 |
 | `GET` | `/api/modules` | bootstrap modules with their parameters |
@@ -124,32 +133,15 @@ credentials get `401`, too little access `403`, too many failed logins `429`.
 | `DELETE` | `/api/bootstrap-profiles/{name}` | delete one |
 | `GET` | `/api/templates` | saved instance templates |
 | `PUT` | `/api/templates/{name}` | create or replace one |
-| `DELETE` | `/api/templates/{name}` | delete one (`409` while a stack launches it) |
+| `DELETE` | `/api/templates/{name}` | delete one (`409` while a task launches it) |
 | `POST` | `/api/templates/{name}/launch` | `{"count":3}` → create instances from it; `nodes`/`groups` spread it across a cluster |
 | `GET` | `/api/templates/{name}/instances` | names of the instances launched from it |
 | `POST` | `/api/templates/{name}/exec` | `{"command":"uptime","instances":[...]}` → run on each, with output |
 | | | `instances` entries may be `{"node","name"}`, spreading destroy/recreate/exec over a cluster |
-| `POST` | `/api/templates/{name}/recreate` | `{"instances":[...]}` → delete and recreate each, same names; with `"stale":true`, `instances` must be exactly the stale ones no stack launched |
+| `POST` | `/api/templates/{name}/recreate` | `{"instances":[...]}` → delete and recreate each, same names; with `"stale":true`, `instances` must be exactly the stale ones |
 | `POST` | `/api/templates/{name}/destroy` | `{"instances":[...]}` → stop and delete each |
 | `GET` | `/api/template-runs` | launches/recreates/destroys in progress, or last finished, per template |
 | `DELETE` | `/api/template-runs/{name}` | dismiss a finished run |
-| `GET` | `/api/stacks` | saved stacks; see [Stacks](stacks.md#api) for the rest |
-| `PUT` | `/api/stacks/{name}` | `{"description","stages","variables","secrets"}` → create or replace one |
-| `DELETE` | `/api/stacks/{name}` | delete one |
-| `POST` | `/api/stacks/{name}/launch` | `{"params":{},"background":true}` → run it stage by stage; `variables`/`secrets` as in [Stacks](stacks.md#api) |
-| `POST` | `/api/stacks/{name}/swarms/{swarm}/start` | `{"counts":{step:n},"variables","params","background":true}` → run one of its swarms against it; see [Stacks](stacks.md#swarms-load-tests-against-a-running-stack) |
-| `POST` | `/api/stacks/{name}/swarm-sequence` | `{"swarms":[...],"counts":{swarm:{step:n}},"variables","params","background":true}` → run several swarms in order (no `swarms`: the stack's own sequence), each torn down before the next, a failure skipping the rest; see [Stacks](stacks.md#swarms-load-tests-against-a-running-stack) |
-| `POST` | `/api/stacks/{name}/swarms/{swarm}/stop` | stop a running swarm, or the whole sequence it is part of (one running on another member is stopped there; the answer then carries `node`), or `{"instances":[...]}` to destroy what one left behind |
-| `GET` | `/api/stacks/{name}/secrets` | which of its secrets hold a value -- never the value |
-| `PUT`/`DELETE` | `/api/stacks/{name}/secrets/{secret}` | `{"value"}` → set one / forget its value |
-| `POST` | `/api/stacks/{name}/secrets/{secret}/reveal` | `{"password"}` → the value, to an admin who confirms it; see [Security](security.md#stack-secrets) |
-| `GET` | `/api/stack-runs` | stacks running, or last finished, on this node. A run's `id` tags a swarm's instances (`swarm_run` in listings); a launch step's `instances[]` carry `output`, what each one's modules said last. Starting any run of a stack is refused (`409`) while another member is running it |
-| `GET` | `/api/stack-runs/{name}/report` | the stack's last finished run as Markdown: `{"stack","filename","markdown"}`; 409 while it runs |
-| `GET` | `/api/stack-instances` | each stack's instances, by their tags, on every node |
-| `POST` | `/api/stacks/{name}/state` | `{"action":"stop","instances":[...]}` → start/stop/restart them all |
-| `POST` | `/api/stacks/{name}/destroy` | `{"instances":[...]}` → stop and delete them all |
-| `POST` | `/api/stack-runs/{name}/cancel` | start nothing new in a running stack |
-| `DELETE` | `/api/stack-runs/{name}` | dismiss a finished run |
 | `GET` | `/api/tasks` | saved tasks; see [Tasks](tasks.md#api) for the rest |
 | `PUT` | `/api/tasks/{name}` | `{"template","bootstrap","schedule","inputs","secrets",...}` → create or replace one |
 | `DELETE` | `/api/tasks/{name}` | delete one |
@@ -254,25 +246,3 @@ See also [Nodes and federation](cluster.md) for `/api/cluster`,
 [Instance templates](templates.md) for `/api/templates`, and
 [Web UI tour](web-ui.md) for `/api/resources`, `/api/networks` and
 `/api/images/browse`.
-
-## Fabrics
-
-| Endpoint | What it does |
-| --- | --- |
-| `GET /api/fabrics` | every fabric in the cluster, and each node's own report of its part (asks every member) |
-| `GET /api/fabrics/check?name=&prefix=` | would this fabric fit on every node? Blank fields are filled with the first free name and /16 |
-| `POST /api/fabrics` | create a fabric on every node: `{name, prefix, nat}`, any of them may be omitted |
-| `POST /api/fabrics/{name}/extend` | give every member that lacks one a subnet in it |
-| `DELETE /api/fabrics/{name}` | remove it from every node; refused while a template names it or any instance is attached |
-| `GET /api/fabric` | this node's half: its subnet, bridge and per-peer routes in each fabric |
-| `GET /api/fabric/host` | what this host already uses, which `check` asks each member for |
-| `GET /api/fabric/plan` | the host commands that would bring routes and firewall up to date |
-| `POST /api/fabric/apply` | create the bridges, program the routes and the firewall |
-| `POST /api/fabric/instances/{name}/attach` | give an instance a NIC on a fabric, `{fabric}` (`detach` removes it) |
-
-`PUT` and `DELETE /api/fabric/claims/{name}` exist too, but are members-only:
-they are how the node a fabric is created or deleted on tells each peer.
-Setting one node's subnet by hand is how two nodes end up holding the same
-range.
-
-See [Networking between nodes](networking.md).

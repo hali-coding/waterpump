@@ -53,7 +53,7 @@ import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-from . import eventlog, store
+from . import eventlog, features, health as health_checks, store
 from .auth import ADMIN, TOKEN_PREFIX, AuthError
 from .bootstrap import discover_modules, module_source, normalise_module_id
 from .lxd import LXDError, cluster_version_problem
@@ -117,6 +117,13 @@ REMOTE_POLL_SECONDS = 3
 SIZE_GROUPS = ("large", "small")
 SIZE_TOLERANCE = 0.05
 
+# The group of every member, derived and never stored. A task must name a
+# group, and a single server has none until somebody makes one -- the first
+# thing a newcomer would hit. `all` is still a choice the record makes, so a
+# task naming nothing keeps running nowhere; it only means "whoever is a
+# member now", including a node that joins later.
+ALL_GROUP = "all"
+
 # Telling a node it has been evicted is what makes the removal clean, so it is
 # worth a real wait -- but not the full one: an operator is watching a dialog,
 # and a host that is switched off refuses at once anyway.
@@ -132,7 +139,12 @@ TASK_FIELDS = ("description", "enabled", "template", "bootstrap", "script", "sch
 # Cluster-wide settings: one record each in store's cluster-settings/, synced
 # like a template. The function is what makes a value valid, and the only
 # names a record may have.
-CLUSTER_SETTINGS = {eventlog.SETTING_NAME: eventlog.clean_settings}
+CLUSTER_SETTINGS = {eventlog.SETTING_NAME: eventlog.clean_settings,
+                    features.SETTING_NAME: features.clean_settings,
+                    health_checks.SETTING_NAME: health_checks.clean_settings}
+# What each one's validator raises: all three carry .message and .code.
+_SETTING_ERRORS = (eventlog.LoggingSettingsError, features.FeatureError,
+                   health_checks.HealthSettingsError)
 
 # What a node reconciles on its own when it comes back. The auto-propagated
 # kinds and only those: `users` crosses as a password hash and is pushed only
@@ -217,6 +229,10 @@ def _setting_summary(name, value):
         remote = ["%s://%s:%s" % (d["protocol"], d["host"], d["port"])
                   for d in value["destinations"] if d["enabled"]]
         return "level %s, remote %s" % (value["level"], ", ".join(remote) or "none")
+    if name == features.SETTING_NAME:
+        return ", ".join("%s %s" % (k, "on" if v else "off") for k, v in sorted(value.items()))
+    if name == health_checks.SETTING_NAME:
+        return ("every %gs" % value["interval_seconds"]) if value["enabled"] else "off"
     return ""
 
 
@@ -1374,10 +1390,27 @@ class ClusterService:
         return sorted(g["name"] for g in store.load_node_groups().values()
                       if node_name in g["members"])
 
-    def list_groups(self):
+    def node_groups(self):
+        """Every group by name, `all` included: what placement resolves against.
+
+        A stored file called `all` is ignored -- the name is the managed
+        group's, like `managed` is derived from a name rather than stored.
+        """
+        groups = {name: group for name, group in store.load_node_groups().items()
+                  if name != ALL_GROUP}
+        groups[ALL_GROUP] = {"name": ALL_GROUP, "members": self.all_nodes(),
+                             "description": "Every member of the cluster, kept by waterpump"}
+        return groups
+
+    def list_groups(self, derived=True):
+        """The groups, with `all` first unless ``derived`` is off (sync's view)."""
         known = set(self._peers()) | {self.local_name()}
         groups = []
+        if derived:
+            groups.append(dict(self.node_groups()[ALL_GROUP], managed=True, unknown_members=[]))
         for _, group in sorted(store.load_node_groups().items()):
+            if group["name"] == ALL_GROUP:
+                continue
             members = group["members"]
             groups.append(dict(group, **{
                 "members": members,
@@ -1399,6 +1432,12 @@ class ClusterService:
         is the sizing itself, or a member relaying it -- the guard is on the
         person at either end, not on the cluster keeping itself level.
         """
+        if name == ALL_GROUP and not managed:
+            # Only a member from before `all` can send one (``managed``), and
+            # its file is stored but never read: node_groups() ignores it.
+            raise ClusterError(
+                "'%s' is every member of the cluster, kept by waterpump, so it cannot "
+                "be %s." % (name, verb), 409)
         if not managed and name in SIZE_GROUPS:
             raise ClusterError(
                 "'%s' is maintained by waterpump from what each node has, so it "
@@ -1656,7 +1695,7 @@ class ClusterService:
                 raise ClusterError("No node called '%s'." % name, 404)
             if name not in chosen:
                 chosen.append(name)
-        stored = store.load_node_groups()
+        stored = self.node_groups()
         for group_name in (groups or []):
             group = stored.get(str(group_name).strip())
             if not group:
@@ -1866,7 +1905,7 @@ class ClusterService:
             "node": self.local_node(),
             "secret": self.cluster_secret(),
             "members": self.members(),
-            "groups": [g["name"] for g in self.list_groups()],
+            "groups": [g["name"] for g in self.list_groups(derived=False)],
             # The joiner cannot allocate its own subnet -- nothing in two
             # conflicting claims says which is right -- so the node admitting
             # it picks one, the same way it hands over the credential.
@@ -2319,7 +2358,7 @@ class ClusterService:
                 module_ids.update(profile["modules"])
 
         if "groups" in kinds:
-            for group in self.list_groups():
+            for group in self.list_groups(derived=False):
                 if wanted is not None and group["name"] not in wanted:
                     continue
                 items.append(("groups", group["name"], {
@@ -2753,7 +2792,7 @@ class ClusterService:
             # may write them -- a member's sizing is exactly what managed= is for.
             self.save_group(name, members=body.get("members"),
                             description=body.get("description", ""), propagate=False,
-                            managed=name in SIZE_GROUPS)
+                            managed=name in SIZE_GROUPS + (ALL_GROUP,))
         elif kind == "stacks":
             self._stack_service().save_stack(name, stages=body.get("stages"),
                                              description=body.get("description", ""),
@@ -2783,8 +2822,8 @@ class ClusterService:
         elif kind == "profiles":
             self.service.delete_bootstrap_profile(name)
         elif kind == "groups":
-            self.delete_group(name, everywhere=False, managed=name in SIZE_GROUPS,
-                              relayed=True)
+            self.delete_group(name, everywhere=False,
+                              managed=name in SIZE_GROUPS + (ALL_GROUP,), relayed=True)
         elif kind == "stacks":
             self._stack_service().delete_stack(name, everywhere=False)
         elif kind == store.STACK_SECRETS_KIND:
@@ -2951,7 +2990,12 @@ class ClusterService:
             raise ClusterError("There is no cluster setting called '%s'." % name, 404)
         try:
             value = clean(value)
-        except eventlog.LoggingSettingsError as exc:
+            if propagate and name == features.SETTING_NAME:
+                # A person's choice only: a member relaying one decided it
+                # where the check already ran, and refusing it here would
+                # leave the cluster split.
+                features.refuse_off(value, self._features_elsewhere(value))
+        except _SETTING_ERRORS as exc:
             raise ClusterError(exc.message, exc.code)
         store.save_setting(name, {"value": value})
         if name == eventlog.SETTING_NAME:
@@ -2959,6 +3003,30 @@ class ClusterService:
         eventlog.event("change", "setting.save", level=eventlog.NOTICE, setting=name,
                        summary=_setting_summary(name, value))
         return self._with_sync({"name": name, "value": value}, "settings", name, propagate)
+
+    def _features_elsewhere(self, value):
+        """``{node: {feature: [names]}}``: what each other member still uses of
+        the features ``value`` switches off.
+
+        Best effort, like `StackService.peer_runs()`: a member that does not
+        answer (or predates the flags) is passed over rather than holding the
+        switch hostage, and loses nothing by it -- its own `effective()` keeps
+        the feature on while anything of it is there.
+        """
+        if not features.switching_off(value) or not self.cluster_secret():
+            return {}
+        local = self.local_name()
+        peers = sorted(n for n in self._peers() if n != local)
+
+        def ask(node):
+            try:
+                state = self.client(node, timeout=PROBE_TIMEOUT).request("GET", "/api/features")
+            except (NodeError, ClusterError, OSError):
+                return node, {}
+            used = state.get("in_use") if isinstance(state, dict) else None
+            return node, used if isinstance(used, dict) else {}
+
+        return {node: used for node, used in self._fanout(peers, ask) if used}
 
     def delete_setting(self, name, everywhere=True):
         """Back to the default, here and (``everywhere``) on every member."""

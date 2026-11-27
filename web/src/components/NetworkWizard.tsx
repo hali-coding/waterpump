@@ -9,6 +9,8 @@ export type NetworkKind = 'bridge' | 'fabric' | 'lan'
 interface Props {
   onCancel: () => void
   onPick: (kind: NetworkKind) => void
+  /** Fabrics are experimental: offered only while switched on in Settings. */
+  fabrics: boolean
 }
 
 interface Choice {
@@ -27,7 +29,7 @@ interface Choice {
  * wizard starts there rather than with bridges, fabrics and NICs, and hands on
  * to the form for the answer picked.
  */
-export function NetworkWizard({ onCancel, onPick }: Props) {
+export function NetworkWizard({ onCancel, onPick, fabrics }: Props) {
   const [members, setMembers] = useState<number | null>(null)
   const [picked, setPicked] = useState<NetworkKind>('bridge')
 
@@ -56,8 +58,8 @@ export function NetworkWizard({ onCancel, onPick }: Props) {
       title: 'Shared across the cluster (fabric)',
       reach: 'Each other on every node, by their own addresses',
       about: <>
-        One network on every node, each node with its own /24, routed between them — a
-        stack’s tiers can talk directly whichever host they landed on, and every node
+        Experimental. One network on every node, each node with its own /24, routed between
+        them — instances talk directly whichever host they landed on, and every node
         reaches them too.
         {members === 1 && <> This node is not in a cluster yet, so it spans this host until
           others join.</>}
@@ -71,12 +73,14 @@ export function NetworkWizard({ onCancel, onPick }: Props) {
       reach: 'Everything on your network, like any other machine',
       about: <>
         Instances get their address from your router, with no NAT and no DHCP from
-        waterpump, and are reachable from anything on that network. They still reach
-        every fabric.
+        waterpump, and are reachable from anything on that network.{fabrics && <> They
+        still reach every fabric.</>}
       </>,
       next: 'Next: which network card, and how — macvlan (nothing on the host changes), a spare NIC as a bridge, or this host’s own NIC as a bridge.',
     },
   ]
+
+  const offered = choices.filter((choice) => fabrics || choice.kind !== 'fabric')
 
   return (
     <Modal
@@ -94,7 +98,7 @@ export function NetworkWizard({ onCancel, onPick }: Props) {
     >
       <div className="check-list" role="radiogroup" aria-label="Kind of network"
         style={{ maxHeight: 'none', gap: 10 }}>
-        {choices.map((choice) => (
+        {offered.map((choice) => (
           <label key={choice.kind} className="check" style={{ alignItems: 'flex-start' }}>
             <input type="radio" name="network-kind" checked={picked === choice.kind}
               onChange={() => setPicked(choice.kind)}

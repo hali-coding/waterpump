@@ -2,13 +2,12 @@
 
 [← back to README](../README.md)
 
-A waterpump deployment is meant to be several nodes: hosts that each run their
-own LXD or Incus and their own waterpump, federated so that any one of them can
-launch a [stack](stacks.md) across all of them, and list, operate and sync
-everything on every host. A single node works on its own, and is where a
-cluster starts; see
-[the recommended deployment](../README.md#recommended-deployment-several-nodes)
-for the usual shape.
+A cluster is several nodes: hosts that each run their own LXD or Incus and
+their own waterpump, federated so that any one of them can launch templates
+and run tasks across all of them, and list, operate and sync everything on
+every host. The hosts may mix LXD and Incus and different distributions. A
+single node works on its own, and is where a cluster starts; see
+[Then add more hosts](../README.md#then-add-more-hosts) for the steps.
 
 Federation is about running workloads over the nodes, not about managing the
 nodes themselves. It carries what a deployment needs from each host — its
@@ -16,9 +15,10 @@ instances, its capacity for sizing groups, a maintenance mark that keeps new
 instances off it — and leaves provisioning and looking after the hosts to the
 tools built for that.
 
-Containers on different nodes cannot reach each other by default -- a managed
-bridge NATs its traffic. [Fabrics](networking.md) add routed networks shared by
-every node; they are opt-in and need the nodes on one L2 network.
+Containers on different nodes cannot reach each other by their own addresses
+-- a managed bridge NATs their traffic. Put them on a [LAN network](lan.md) to
+make them reachable from anywhere on it; the experimental
+[fabrics](experimental.md#fabrics) route between nodes instead.
 
 There is no leader, no quorum and no shared database. Every node is a complete
 waterpump that works on its own; a cluster only means each one knows how to call
@@ -161,8 +161,8 @@ What happens:
 5. The joiner announces itself to every member it just learned about.
 6. It runs one [reconciliation](#a-node-that-was-switched-off-catches-itself-up)
    pass straight away, rather than waiting for the hourly one: having no
-   deletions on record, it takes every member's templates, modules, profiles,
-   stacks and groups, and shares any of its own. What differs on both sides is
+   deletions on record, it takes every member's templates, tasks, modules,
+   profiles, groups and settings, and shares any of its own. What differs on both sides is
    reported, never overwritten.
 7. It makes every **macvlan** network a member has, under the same name, on
    its own default-route NIC -- so a template naming `lan` gets the LAN on the
@@ -241,7 +241,14 @@ waterpump cluster groups
 waterpump cluster group delete edge -y
 ```
 
-Deleting a group is refused (`409`) while a stack's launch step targets it.
+Deleting a group is refused (`409`) while a task targets it.
+
+**`all`** is every member, kept by waterpump: it gains a node the moment one
+joins and loses it when it leaves, so it is never stored or synced and cannot
+be edited or deleted. It is what a new task runs on, and what to launch over
+for "one each, everywhere" (`waterpump launch web -n 4 --group all`). On a
+single server it holds that server, which is what lets a task run there with
+no group made first.
 
 A group is just a list of names. It can name a node that is not enrolled yet —
 listings mark those as unknown rather than dropping them — but launching at a
@@ -338,19 +345,12 @@ waterpump cluster maintenance off --node nodeB
 or with **Maintenance** / **End maintenance** on its card in the Cluster tab.
 While it lasts:
 
-- **No new instances there.** Creating a container, launching a template or a
-  stack, and recreating a template's instances are refused (`409`, with the
-  reason). A launch that names the node is refused; a launch to a *group* skips
-  it and says so in the run's notes, and is refused only if nothing in the
-  group is left. A stack checks this before its first stage, so a relaunch is
-  refused before anything is torn down.
-- **No fabric changes.** Creating, extending or deleting a fabric that would
-  touch it waits until it is back, and on the node itself fabric claims,
-  attaching and detaching are refused. Its own routes are left exactly as they
-  were, and brought up to date when maintenance ends. `waterpump fabric apply` on
-  the node still works: it only programs what the node already claims, which is
-  how routes come back after a reboot during maintenance.
-- **Definitions still sync.** Templates, stacks, modules, profiles and groups
+- **No new instances there.** Creating a container, launching a template and
+  recreating a template's instances are refused (`409`, with the reason). A
+  launch that names the node is refused; a launch to a *group* skips it and
+  says so in the run's notes, and is refused only if nothing in the group is
+  left. A task's run goes to another member of its groups.
+- **Definitions still sync.** Templates, tasks, modules, profiles and groups
   are pushed to it as usual, so it comes back level with everyone.
 - Its running instances can still be started, stopped and destroyed.
 
@@ -368,7 +368,10 @@ maintenance. `cluster nodes` and `cluster show` give the reason and who set it
 (`by waterpump` for this), and the Cluster tab shows it on the node's card. The count is kept in `launch-failures.json` in the data
 directory, so CLI launches and `serve`'s add up.
 
-The mark belongs to the node, like its fabric claims: it is kept in the node's
+The experimental [stacks and fabrics](experimental.md) are held back by
+maintenance too.
+
+The mark belongs to the node: it is kept in the node's
 own data directory and reaches the others on its member record, so marking
 another node means asking that node, and it has to be reachable. Every member
 checks its own copy before sending work, and the node refuses as well, so one
@@ -408,12 +411,11 @@ about the host rather than the instance: its storage, networks and nodes.
 
 `waterpump top` is the same picture, live, in the style of btop: every node with
 a CPU and memory meter and a CPU history, every instance on every node with
-its health, CPU, memory and network rates, and a stacks panel while any stack
-has instances or a run in progress (stage by stage, with the step that is
-running). It needs no `serve` of its own to work.
+its health, CPU, memory and network rates, and a templates panel. It needs no
+`serve` of its own to work.
 
 ```
-waterpump top              # q quits; ↑↓ select, tab to stacks and templates,
+waterpump top              # q quits; ↑↓ select, tab to templates,
                              # space mark, c console, b bootstrap, s sort
                              # (node/cpu/mem/name), r running only, n one node
                              # at a time, +/- interval
@@ -422,7 +424,7 @@ waterpump top --once       # one frame, e.g. into a file
 waterpump top --json       # one snapshot, two readings a second apart
 ```
 
-Health records and stack runs are kept in memory by the `serve` that made
+Health records and template runs are kept in memory by the `serve` that made
 them, so for this node `top` asks the local `serve` (over loopback, pinned
 like a peer when it serves TLS) and says so in its header when there is none;
 a peer's come from that peer. CPU is worked out between two readings, so the
@@ -456,19 +458,21 @@ the daemon and one on a peer through that node's own bootstrap endpoint, both
 with `remember` off. Quitting while a run is going asks twice, since a run on
 this node stops part-way when `top` does; one on a peer carries on there.
 
-**Tab moves to the stacks panel, then the templates panel**, and back to the
-instances. Both panels list every stack or template this node holds — they
-are synced, so that is the cluster's — whether or not it has instances, so a
-first launch happens from here too. With a panel focused, the footer switches
-to its keys and ↑↓ picks an item:
+**Tab moves to the templates panel**, and back to the instances. It lists
+every template this node holds — they are synced, so that is the cluster's —
+whether or not it has instances, so a first launch happens from here too.
+With the panel focused, the footer switches to its keys and ↑↓ picks a
+template:
 
-| | Stacks | Templates |
-| --- | --- | --- |
-| `l` | relaunch (launch, when it has no instances) | launch: a count, and in a cluster where — this node, every node or a group |
-| `u` / `s` / `r` | start / stop / restart every instance | start / stop / restart every instance |
-| `c` | | recreate every instance from the template |
-| `d` | destroy | destroy |
-| `x` | cancel the run in progress | |
+| Key | Action |
+| --- | --- |
+| `l` | launch: a count, and in a cluster where — this node, every node or a group |
+| `u` / `s` / `r` | start / stop / restart every instance |
+| `c` | recreate every instance from the template |
+| `d` | destroy |
+
+With the experimental stacks on, a stacks panel comes first; see
+[Stacks](stacks.md#in-waterpump-top).
 
 A key that does not apply to the selected item is dimmed, and pressing it
 says why — such as while a run is going; a template has one run at a time,
@@ -478,14 +482,11 @@ A shortcut goes straight to the same confirmation the menu does: stop,
 restart, recreate, destroy and relaunch list every instance they will touch
 and wait for `y` (Esc backs out); that list is also what the service checks
 the instances against, so one launched meanwhile makes it refuse rather than
-act on something unseen. Recreating or destroying a template's instances that
-belong to a stack says so first. A stack relaunch asks for the stack's launch
-inputs (`{{params.NAME}}`) and any module secret no step sets, the same values
-`waterpump stack-launch` prompts for; a template launch or recreate asks for its
-modules' secrets. Either way they are masked and never kept.
+act on something unseen. A template launch or recreate asks for its modules'
+secrets, masked and never kept.
 
-The actions go to this node's `serve`, so a launch, recreate, destroy or
-relaunch is an ordinary stack or template run there: it carries on after
+The actions go to this node's `serve`, so a launch, recreate or destroy is an
+ordinary template run there: it carries on after
 `top` exits, and the panel — like the web UI — follows it. A cancel goes to
 whichever node holds the run. Without a `serve` here, start, stop and restart
 still work (they finish in seconds), but the actions that start a run are
@@ -560,7 +561,6 @@ asked for:
 | --- | --- | --- |
 | `pool` | no such storage pool | the default profile's root disk |
 | `network` | no such managed network | the default profile's NIC |
-| `fabric` | not on that fabric | one NIC, reachable only on its own host |
 | `profiles` | no such profile | the remaining profiles, else `default` |
 
 Every substitution is reported twice: on the run, where the UI shows it against
@@ -570,7 +570,6 @@ launch started from another node's UI is only visible there.
 ```
 ! nodeA: No storage pool 'fast-nvme' on this node; used the default profile's pool (default) instead.
 ! nodeB: No network 'dmz-br' on this node; used the default profile's network (lxdbr0) instead.
-! nodeC: This node is not on the fabric pumpfab1; launched without its NIC, so these instances can only be reached from this host.
 ```
 
 What a node cannot substitute — an image it cannot pull, no space, a module that
@@ -586,8 +585,9 @@ the template, exactly as a single-node run is.
 
 ## Shared definitions stay level by themselves
 
-Templates, modules, bootstrap profiles, node groups, [stacks](stacks.md),
-pinned images and cluster settings ([logging](logging.md)) are things the whole
+Templates, tasks, modules, bootstrap profiles, node groups, pinned images and
+cluster settings ([logging](logging.md), health checks and the
+[experimental features](experimental.md)) are things the whole
 cluster is meant to agree on, so **saving one pushes it to every member there
 and then** — no sync step to remember. The same goes for deleting one, since a
 copy left behind on one node is drift that a push-only sync can never clear.
@@ -631,7 +631,7 @@ The Cluster tab has the same thing behind **Reconcile**, and a **Shared
 definitions** panel showing what the last pass found.
 
 Each member is asked for a digest of everything shared — one SHA-256 per
-template, module, profile, stack and node group, taken over the very body a push
+template, task, module, profile, node group, pin and setting, taken over the very body a push
 would send. Only what actually differs is then fetched, so an hourly pass over a
 whole cluster costs one small request per node.
 
@@ -684,15 +684,17 @@ waterpump cluster sync --name web --node nodeB         # just this one
 waterpump cluster sync --kind users --kind groups --group edge
 ```
 
-`--kind` takes any of `templates`, `modules`, `profiles`, `groups`, `stacks`,
-`pins` (pinned images), `settings` (cluster settings such as
-[logging](logging.md)) and `users`, repeated; the UI has the same list behind
+`--kind` takes any of `templates`, `tasks`, `task-secrets`, `modules`,
+`profiles`, `groups`, `pins` (pinned images), `settings` (cluster settings:
+[logging](logging.md), `health` and `features`) and `users`, repeated -- and
+`stacks` and `stack-secrets` for the experimental [stacks](stacks.md); the UI has the same list behind
 **Sync** on the Cluster tab.
 
 Notes:
 
 - **Node groups** sync as `--kind groups`, `large` and `small` included — a
   member relaying the sizing may write them even though a person may not.
+  `all` never syncs: every node works it out from its own member list.
 - **Users** sync as `--kind users`: each local account is copied with its role
   and its **password hash**, so the same login works on every node. There is no
   plaintext password anywhere to re-hash on the far side, so the stored record
@@ -765,7 +767,7 @@ refuse it — with a message saying exactly that. Re-join it with a fresh code.
   tls/node-cert.pem        generated on first federating
   runtime.json             what `serve` is listening on, so the CLI can advertise it
   changes.json             when this node last saved or deleted each shared artifact
-  cluster-settings/<name>.json  settings every member shares: `logging` so far
+  cluster-settings/<name>.json  settings every member shares: `logging`, `health`, `features`
 ```
 
 `changes.json` is the change ledger reconciliation reads. Unlike everything else

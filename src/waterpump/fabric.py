@@ -42,7 +42,7 @@ import sys
 import threading
 import time
 
-from . import eventlog, hostnet, store
+from . import eventlog, features, hostnet, store
 from .lxd import LXDError
 from .service import ServiceError, free_nic
 
@@ -1100,6 +1100,8 @@ class FabricService:
         quietly take that host's traffic away. A blank name or prefix is
         filled with the first free one, which is how the UI proposes both.
         """
+        # Fabrics are experimental: a new one is a person's choice to enable them.
+        features.require("fabrics")
         hosts, unreachable = self._inventories()
         definitions = self.definitions()
         for inventory in hosts.values():
@@ -1280,6 +1282,7 @@ class FabricService:
         when the fabric was made. Only the nodes being added are checked for
         what they use; the others already hold their /24.
         """
+        features.require("fabrics")
         with self._change_lock:
             definitions = self.definitions()
             if name not in definitions:

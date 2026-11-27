@@ -8,10 +8,9 @@ start and secure boot flags, and a bootstrap selection — modules, every one of
 parameters, and the SSH public keys to install. Launching one creates one or
 many identical instances in a single step.
 
-Templates are what a [stack](stacks.md) is made of: each launch step names
-one. Launching a template on its own is useful for a fleet of identical
-instances with nothing to wire between them; anything with tiers that depend
-on each other is a stack.
+A template is also what a [task](tasks.md) runs its job in: each run is a
+fresh instance of it. (The experimental [stacks](experimental.md#stacks)
+launch templates in stages too.)
 
 A [bootstrap profile](modules.md#defaults-saved-settings-and-profiles) only
 covers the bootstrap part; a template covers everything. The template editor
@@ -20,8 +19,8 @@ can start its module selection from a profile.
 ## In the web UI
 
 The **Templates** tab lists every template with what it creates and which
-instances were launched from it. Pick a count and press **Launch**; the names
-the launch will use are shown beside the button. Instances are created one per
+instances were launched from it. Pick a count and press **Launch**; hovering
+over the button shows the names the launch will use. Instances are created one per
 host CPU core at a time, and each reports its own result, so one that fails to
 create or bootstrap does not stop the rest, and the ones that exist are kept.
 
@@ -76,8 +75,7 @@ result; so does a `serve` on another daemon or project than the command's
 
 Deleting a template asks first, since the delete reaches every member; `-y`
 skips the question, and without a terminal it is required. A delete is refused
-(`409`) while a [stack](stacks.md) launches the template; the error names the
-stacks.
+(`409`) while a task runs on the template; the error names the tasks.
 
 ```bash
 ./waterpump template-exec "Web server" -- apt-get -y upgrade
@@ -150,15 +148,12 @@ card, a note in its drawer, a count on Home, and `stale: template` in
 --stale`) recreates just those, leaving current instances alone; **Recreate
 all** does every one. Either uses the template as it is now.
 
-Replace stale leaves out instances a stack launched: they carry values the
-stack rendered for them (another step's address, say), which a recreate from
-the template would drop. The stack's own **Replace stale** is the way to
-refresh those. The server checks the set it is given against the stale set,
+The server checks the set it is given against the stale set,
 as it checks a full recreate against every instance, and refuses (409) if
 anything changed since you looked.
 
-Only what shapes the instance counts -- image, type, size, storage, network,
-fabric, profiles, boot options and the bootstrap selection. Changing the
+Only what shapes the instance counts -- image, type, size, storage, network
+(and fabric), profiles, boot options and the bootstrap selection. Changing the
 description, the instance-name prefix or the app check does not make anything
 stale: none of those is baked into an instance.
 
@@ -166,7 +161,8 @@ Each node judges its own instances against its own copy of the template,
 which sync keeps level with everyone's. Instances made before waterpump kept
 revisions carry none and are never marked, since there is nothing to compare;
 recreating them starts tracking. The API reports it as `stale` (a list of
-`template` and/or `stack`) and `revisions` on every container.
+`template`, and `stack` for an experimental [stack](experimental.md#stacks)'s
+instances) and `revisions` on every container.
 
 ## App health checks
 
@@ -250,6 +246,7 @@ federated with others (see [Nodes and federation](cluster.md)), `launch` takes
 
 ```bash
 waterpump launch web -n 6 --group edge
+waterpump launch web -n 4 --group all     # round robin over every member
 ```
 
 Instances go round robin, and the `<prefix>-<n>` numbering is allocated across
@@ -280,7 +277,7 @@ waterpump launch "Golden" -n 3                  # app-1..3, clones of golden/bas
 Each instance is a copy-on-write clone where the storage driver supports it
 (zfs, btrfs, lvm), so a launch is quick. The clone is container or VM as its
 source was, and it is made its own instance on the way: waterpump tags from the
-source (its template, its stack) are removed, and a container's
+source (its template, and any stack or task) are removed, and a container's
 `/etc/machine-id` is emptied so systemd makes a new one at first boot --
 otherwise every clone would ask DHCP for the source's address. A VM's files
 cannot be reached before it boots, so a VM clone keeps its source's

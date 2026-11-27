@@ -43,6 +43,10 @@ PAUSED = "paused"
 
 SETTINGS_SECTION = "health"
 SETTINGS_VERSION = 1
+# The cluster setting (cluster.py's CLUSTER_SETTINGS) that, once saved, is what
+# every member judges health by. The node's own config/health.json is only the
+# fallback for a node that has never had one, so an upgrade changes nothing.
+SETTING_NAME = "health"
 MIN_INTERVAL = 15
 
 DEFAULT_SETTINGS = {
@@ -155,6 +159,28 @@ def load_settings():
     except HealthSettingsError as exc:
         return dict(DEFAULT_SETTINGS), "Ignoring saved health settings in %s: %s" % (
             store.config_path(SETTINGS_SECTION), exc.message)
+
+
+def current():
+    """``(settings, source, warning)``: what health is judged by now.
+
+    The cluster record first, then this node's legacy file, then defaults --
+    read every call, so a save by the CLI or a member's push reaches `serve`
+    on its next round without a restart. ``source`` is "cluster", "node" or
+    "default".
+    """
+    record = store.load_settings_records().get(SETTING_NAME)
+    if record is not None:
+        try:
+            return clean_settings(record["value"]), "cluster", None
+        except HealthSettingsError as exc:
+            warning = "Ignoring the cluster's health settings: %s" % exc.message
+            settings, legacy = load_settings()
+            return settings, "default", legacy or warning
+    settings, warning = load_settings()
+    configured = store.config_path(SETTINGS_SECTION)
+    return settings, ("node" if warning is None and os.path.exists(configured)
+                      else "default"), warning
 
 
 def save_settings(settings):

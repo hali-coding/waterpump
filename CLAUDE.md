@@ -2,11 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-waterpump is application orchestration on LXD/Incus: a web UI, CLI and REST API
-whose core is the **stack** (templates launched in stages across federated
-nodes, wired together and operated as one deployment). Multi-node is the
-recommended deployment; the host-level features (init, storage, networks,
-maintenance) exist to get a node ready and are not a node management tool.
+waterpump runs **instances and tasks** on LXD/Incus: a web UI, CLI and REST API
+for launching instances from templates and running jobs (tasks) in throwaway
+instances, on one server or a federated cluster of mixed hosts -- LXD and
+Incus, different distributions. **Stability on that mix is the priority**: the
+everyday path (templates, instances, health, tasks) must behave the same on
+every host, and `ci/tests/` holds it to that on a four-OS cluster. Stacks and
+fabrics are *experimental features, off by default* (see "Feature flags"); a
+change must never make the everyday path depend on them. The host-level
+features (init, storage, networks, maintenance) exist to get a node ready and
+are not a node management tool.
 `README.md` and `docs/*.md` are the user-facing reference (CLI commands, REST endpoints, module authoring, socket
 discovery) and are kept current — read them for behaviour; this file covers how the code
 is put together. README.md is deliberately short: it links out to docs/ for anything more
@@ -97,6 +102,36 @@ runner), `simplestreams.py` (remote image catalogs, 15-minute in-process cache),
 (the bind address and leaving unconfigured mode -- see below), `eventlog.py`
 (who did what, to syslog -- see below).
 
+### Feature flags
+
+`features.py` holds the experimental features, `stacks` and `fabrics`. They are
+one cluster setting (`features` in `CLUSTER_SETTINGS`), synced like logging,
+because a per-node flag would let one member push a stack onto another that
+hides it. Three rules, all of which keep a flag from breaking what runs:
+- **An upgrade never hides live work.** `effective()` is the saved record, or
+  -- with none -- "on where anything of it exists" (a stack record, a fabric
+  claim here or on any member's record), and a saved "off" still reads on
+  while something exists (an older member may push one). So a fresh install
+  is off and an existing deployment is on, with no migration.
+- **Off refuses new things and never tears anything down.** Only a person's
+  `save_stack` (`propagate=True`) and `FabricService.check`/`extend` (and so
+  `create`) call `features.require()`. Deletes, stops, teardown, a member's
+  push, reconciliation and the fabric helper never do -- a gate on those would
+  strand what exists.
+- **Switching off is refused while in use** (`refuse_off()`, in
+  `ClusterService.save_setting()`, person saves only) -- here or on any member
+  that answers (`_features_elsewhere()`, best effort, since a member that
+  cannot be asked keeps the feature on itself) -- so off means nothing of it
+  exists.
+`/api/status` carries `features` (service.py reads it straight from `store`,
+knowing nothing of the cluster), and the UI hides the Stacks tab, Home's
+stacks and the Network tab's fabrics from it (`navFor()` in App.tsx). LAN
+networks are not gated. A new experimental feature is a name in `NAMES`, a
+`require()` at its create paths, an `in_use()` branch and a `feature:` on its
+nav item. In the user docs, `docs/experimental.md` is the one place the rest
+of the docs point to: `stacks.md` and `fabrics.md` hold the detail, and every
+other page describes the everyday path without them, linking there at most.
+
 ### Event log
 
 `eventlog.py` is the one log: stdlib `logging` behind a queue, delivered to
@@ -122,8 +157,9 @@ these hooks must log itself with `eventlog.event("change", ...)`. **Never pass a
 value that could be a secret**: callers pass names and outcomes, request bodies only
 through `server._LOGGED_FIELDS` (an allowlist), CLI positionals only through
 `LOGGED_ARGS`. `_quote()` strips newlines so a name cannot forge a line. Settings are
-a cluster setting (`CLUSTER_SETTINGS` in cluster.py, `store.save_setting()`, sync
-kind `settings`); `eventlog.refresh()` re-reads them on an inode/mtime change, so a
+a cluster setting (`CLUSTER_SETTINGS` in cluster.py -- `logging`, `features`,
+`health` -- `store.save_setting()`, sync kind `settings`, edited on the UI's
+Settings page); `eventlog.refresh()` re-reads them on an inode/mtime change, so a
 CLI save or a peer's push reaches `serve`. A broken record falls back to defaults:
 logging must never stop `serve`. **The live tail** is `EventBuffer`, a destination
 `serve` always has (`setup(buffer=True)`; it survives `apply()` and takes info and up
@@ -593,7 +629,12 @@ member": a task tied to one node dies with it, which is the single owner
 tasks exist to avoid. Nodes may be named only *beside* groups, and
 `eligible()` never falls back to every member for a record that names
 nothing; it runs nowhere and `_public()` says why (`placement_problem`).
-The UI's `TargetPicker` offers groups first for the same reason.
+The UI's `TargetPicker` offers groups first for the same reason. `all`
+(`cluster.ALL_GROUP`) is every member, *derived* by
+`ClusterService.node_groups()` and never stored or synced (`list_groups(
+derived=False)` is sync's view; a stored file named `all` is ignored): it is
+what lets a single server run a task with no group made first, and the task
+editor's default. Anything resolving a group name goes through `node_groups()`.
 
 **Inputs** are declared on the task and given per invocation (SNS-style);
 every one reaches the job as `WATERPUMP_INPUT_<NAME>` and a param may say
@@ -739,7 +780,13 @@ address when there is one, so `{{step.ip}}` means something on another host.
 
 `serve` starts `ContainerService.start_health_monitor()`: a daemon thread that runs
 `check_health()` every `interval_seconds`, never overlapping, and keeps the records in
-memory on the service (one per `serve` process, like template runs). `health()` only
+memory on the service (one per `serve` process, like template runs). The settings are
+a cluster setting (`health` in `CLUSTER_SETTINGS`): `health.current()` resolves the
+shared record, then the node's legacy `config/health.json`, then defaults, and the
+monitor re-reads it before every round and every few seconds between, so a save from
+the Settings page, the CLI or a member's push applies without a restart (checks
+switched on included, which is why the thread runs while they are off). `--no-health`
+pins checks off (`follow=False`). `health()` only
 reads that memory, so `/api/health` is safe in the UI's 3s poll; there is deliberately
 no route that triggers a round. The CLI has no previous round, so `check_health()`
 takes two samples `window` seconds apart for CPU. `health.py` judges samples and never
@@ -754,8 +801,10 @@ API, which relies on being on the daemon's host. VMs use the guest's load via th
 probe, and a container whose cgroup is missing falls back to the probe, judged only when
 `load_scope()` says it is the instance's own. The load threshold is absolute
 (`load_average`, strictly greater than). The file API's Content-Length for a `/proc`
-file can disagree with its body, which `read_file()` tolerates. Health settings are the `health` configure section; unlike auth, a broken
-file falls back to defaults with a warning.
+file can disagree with its body, which `read_file()` tolerates. `configure health`
+saves the shared record through `ClusterService` (`configure.SharedSection`, which
+`logging` and `features` use too); unlike auth, a broken record falls back to
+defaults with a warning.
 
 A template may carry an `app_check` (a Nagios-style script: exit 0/1/2/3), run
 in each instance tagged with that template. Under `serve`, `health.AppChecker`
